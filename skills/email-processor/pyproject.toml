@@ -1,0 +1,11 @@
+[project]
+name = "email-processor"
+version = "0.1.0"
+description = "Process raw emails into structured Obsidian Markdown notes via Gemini CLI"
+requires-python = ">=3.11"
+
+[project.scripts]
+email-processor = "email_processor:main"
+
+[tool.uv]
+dev-dependencies = []

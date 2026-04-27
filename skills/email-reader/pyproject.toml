@@ -1,0 +1,11 @@
+[project]
+name = "email-reader"
+version = "0.1.0"
+description = "Fetch unread emails from Gmail accounts via gog cli"
+requires-python = ">=3.11"
+
+[project.scripts]
+email-reader = "email_reader:main"
+
+[tool.uv]
+dev-dependencies = []
