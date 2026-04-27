@@ -55,7 +55,7 @@ def run_command(cmd: List[str], input_data: Optional[str] = None) -> str:
         result = subprocess.run(cmd_str, input=input_data, capture_output=True, text=True, check=True, encoding='utf-8', shell=True)
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
-        # print(f"Command failed: {e.cmd} - {e.stderr}")
+        print(f"[WARN] Command failed: {e.cmd}\n  stderr: {e.stderr.strip()}", file=sys.stderr)
         return ""
 
 def convert_html_to_md(html_content: str) -> str:
@@ -107,9 +107,16 @@ def update_unsubscribe_list(sender: str, raw_header: str) -> None:
     print(f"    [LISTED] Added {clean_sender_name} <{sender_email}> to Unsubscribe.md")
 
 def mark_as_read(msg_id: str, account: str) -> None:
-    # Correct gog command: gog gmail mark-read <msgId>
-    res = run_command([GOG_BIN, "gmail", "mark-read", msg_id, "-a", account, "--no-input"])
-    print(f"    [READ] Marked {msg_id} as read.")
+    """Mark email as read in Gmail. Only called for promo emails."""
+    try:
+        cmd = f'"{GOG_BIN}" gmail mark-read "{msg_id}" -a "{account}" --no-input'
+        result = subprocess.run(cmd, capture_output=True, text=True, encoding='utf-8', shell=True)
+        if result.returncode == 0:
+            print(f"    [READ] Marked {msg_id} as read.")
+        else:
+            print(f"    [FAIL] Could not mark {msg_id} as read. stderr: {result.stderr.strip()}", file=sys.stderr)
+    except Exception as e:
+        print(f"    [FAIL] Exception marking {msg_id} as read: {e}", file=sys.stderr)
 
 def get_accounts() -> List[str]:
     stdout = run_command([GOG_BIN, "auth", "list", "--plain"])
@@ -182,8 +189,7 @@ def main():
             msg_id = msg_meta.get("id")
             
             if msg_id in processed_ids:
-                print(f"  Syncing state for {msg_id} (already in vault)...")
-                mark_as_read(msg_id, account)
+                print(f"  [SKIP] {msg_id} already in vault. email-processor will handle mark-read.")
                 continue
 
             print(f"  Processing {msg_id}...", flush=True)

@@ -193,6 +193,16 @@ def run_gog(args: list[str]) -> None:
         raise RuntimeError(f"gog command failed (exit {result.returncode}): {cmd_str}")
 
 
+def mark_as_read(gmail_id: str, account: str) -> None:
+    """Mark a Gmail message as read. Called after all actions are completed."""
+    cmd = f'"{GOG_BIN}" gmail mark-read "{gmail_id}" -a "{account}" --no-input'
+    result = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", shell=True)
+    if result.returncode == 0:
+        print(f"    [READ] Marked {gmail_id} as read in Gmail.")
+    else:
+        print(f"    [WARN] Could not mark {gmail_id} as read. stderr: {result.stderr.strip()}", file=sys.stderr)
+
+
 # ---------------------------------------------------------------------------
 # Action Executors
 # ---------------------------------------------------------------------------
@@ -301,10 +311,19 @@ def process_email(filepath: Path) -> None:
         print(f"  [SKIP] No action checked — not yet reviewed.")
         return
 
-    # --- Step 4: Only [x] Read → delete permanently ---
+    # Resolve Gmail ID and account once — needed for mark-read
+    try:
+        gmail_id = extract_gmail_id(filepath)
+        account = extract_account(filepath)
+    except (ValueError, Exception) as e:
+        print(f"  [ERROR] Cannot resolve Gmail ID/account: {e}", file=sys.stderr)
+        return
+
+    # --- Step 4: Only [x] Read → delete permanently then mark read ---
     if read and not reply and not archive and forward is None:
         filepath.unlink()
         print(f"  [DELETE] Only Read checked. Deleted permanently.")
+        mark_as_read(gmail_id, account)
         return
 
     # --- Step 5: Execute reply/forward (STOP-ON-FAIL blocks archive) ---
@@ -326,6 +345,9 @@ def process_email(filepath: Path) -> None:
         move_to_archive(filepath)
     else:
         print(f"  [DONE] Actions executed. No [x] Archive — file stays in inbox.")
+
+    # --- Step 7: Mark as read in Gmail (after all actions succeed) ---
+    mark_as_read(gmail_id, account)
 
 
 # ---------------------------------------------------------------------------
