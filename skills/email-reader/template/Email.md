@@ -32,7 +32,6 @@ tags: [email]
 - [ ] Reply
 - [ ] Archive
 - [ ] Forward → 
-- [ ] Create Task → 
 
 ---
 
