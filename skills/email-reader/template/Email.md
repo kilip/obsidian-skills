@@ -28,7 +28,8 @@ tags: [email]
 ---
 
 ## # Action
-
+- [ ] Read
+- [ ] Reply
 - [ ] Archive
 - [ ] Forward → 
 - [ ] Create Task → 
