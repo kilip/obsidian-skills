@@ -1,3 +1,18 @@
+---
+name: email-reader
+description: >
+  Use this skill whenever the user wants to check email, cek email, baca email,
+  fetch email, sync email, ambil email, pull email baru, lihat email masuk, or
+  read new messages from Gmail. This skill fetches unread emails from all
+  connected Gmail accounts via gog cli, detects promotional emails for the
+  unsubscribe list, and saves regular emails as Markdown notes to the Obsidian
+  Inbox for review.
+allowed-tools:
+  - "Bash"
+  - "Read"
+  - "Write"
+---
+
 # SKILL: Email Reader
 
 ## Overview
@@ -34,10 +49,10 @@ uv run email_reader.py
 |---|---|---|---|
 | `OV_INBOX_PATH` | ✅ | — | Absolute path to the Obsidian Inbox folder |
 | `GOG_BIN` | ❌ | `gog` | Path to `gog` binary |
-| `GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model for briefs |
+| `GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model for generating email briefs |
 
 ## Behavior Rules
-- Fetch emails from **all** authenticated accounts, not just one
+- Fetch emails from **all** authenticated accounts, not just one.
 - **Do NOT mark regular emails as read** — they must remain unread for downstream processing or manual review.
 - **Auto mark as read for promotional emails** only after they are successfully added to the unsubscribe list.
 - Identify promotional emails using `List-Unsubscribe` headers or keywords in the body (e.g., "unsubscribe", "view in browser").

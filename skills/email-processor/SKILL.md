@@ -1,17 +1,32 @@
+---
+name: email-processor
+description: >
+  Use this skill whenever the user wants to process email, proses email,
+  eksekusi email, archive email, reply email, forward email, kirim balasan,
+  bersihkan inbox, or execute pending email actions in Obsidian. This skill
+  reads reviewed email notes in the Obsidian Inbox, executes the checked
+  action checkboxes (Archive, Reply, Forward), moves processed notes to the
+  archive folder, and permanently deletes notes that are marked read-only.
+allowed-tools:
+  - "Bash"
+  - "Read"
+  - "Write"
+---
+
 # SKILL: Email Processor
 
 ## Overview
-> Memproses email notes di `00 - Inbox/Emails/` yang sudah di-review oleh Pak Bos. Membaca action checklist di setiap note, mengeksekusi aksi yang dicentang (Archive, Reply, Forward), lalu memindahkan note ke `05 - Archive/Emails/`. Jika hanya `[x] Read` yang dicentang dan aksi lainnya kosong, file di-delete permanently. Jika tidak ada yang dicentang sama sekali, file dilewati.
+> Processes reviewed email notes in `00 - Inbox/Emails/`. Reads the action checklist in each note, executes checked actions (Archive, Reply, Forward), then moves the note to `05 - Archive/Emails/`. If only `[x] Read` is checked and all other actions are empty, the file is permanently deleted. If nothing is checked, the file is skipped.
 
 ## Prerequisites
 
-- `gog` — Google OAuth CLI tool (untuk reply/forward via Gmail)
-- `OV_INBOX_PATH` — path ke Obsidian Inbox folder
+- `gog` — Google OAuth CLI tool (for reply/forward via Gmail)
+- `OV_INBOX_PATH` — path to the Obsidian Inbox folder
 
 ## Usage
 
 ### How to invoke this skill
-Jalankan setelah Pak Bos selesai review email di `00 - Inbox/Emails/` dan sudah mencentang action yang diinginkan.
+Run this skill after the user has finished reviewing emails in `00 - Inbox/Emails/` and has checked the desired actions.
 
 ```bash
 cd skills/email-processor
@@ -20,132 +35,132 @@ uv run email_processor.py
 ```
 
 ### Input
-- `.md` files di `{OV_INBOX_PATH}/Emails/`
-- File harus mengikuti format template `email-reader/template/Email.md`
-- File dengan frontmatter `status: Processed` akan dilewati (idempotent)
+- `.md` files in `{OV_INBOX_PATH}/Emails/`
+- Files must follow the `email-reader/template/Email.md` format
+- Files with frontmatter `status: Processed` will be skipped (idempotent)
 
 ### Output
-- File dengan `[x] Archive` → dieksekusi → dipindah ke `{OV_INBOX_PATH}/../05 - Archive/Emails/`
-- File dengan `[x] Reply` atau `[x] Forward` → dieksekusi → **tidak** otomatis dipindah kecuali `[x] Archive` juga dicentang
-- File dengan hanya `[x] Read` yang dicentang → di-delete permanently
-- File tanpa aksi apa pun → dilewati
-- Frontmatter `status` di-update ke `Processed` sebelum dipindah
+- Files with `[x] Archive` → executed → moved to `{OV_INBOX_PATH}/../05 - Archive/Emails/`
+- Files with `[x] Reply` or `[x] Forward` → executed → **not** auto-moved unless `[x] Archive` is also checked
+- Files with only `[x] Read` checked → permanently deleted
+- Files with no actions checked → skipped
+- Frontmatter `status` is updated to `Processed` before moving
 
 ## Configuration
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `OV_INBOX_PATH` | ✅ | — | Absolute path to the Obsidian Inbox folder |
-| `GOG_BIN` | ❌ | `gog` | Path ke `gog` binary |
-| `GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model (untuk assist reply) |
+| `GOG_BIN` | ❌ | `gog` | Path to `gog` binary |
+| `GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model (for reply assistance) |
 
 ## Script Logic: `email_processor.py`
 
 ### 1. Entrypoint & Validation
 ```
 main()
-  └── validate_env()         # cek OV_INBOX_PATH exists, gog binary ada
-  └── get_inbox_files()      # glob semua *.md di {OV_INBOX_PATH}/Emails/
+  └── validate_env()         # check OV_INBOX_PATH exists, gog binary available
+  └── get_inbox_files()      # glob all *.md in {OV_INBOX_PATH}/Emails/
   └── for each file → process_email(file)
 ```
 
 ### 2. `process_email(filepath)`
 ```
 1. parse_frontmatter(filepath)
-   - Jika status == "Processed" → skip (log: already processed)
+   - If status == "Processed" → skip (log: already processed)
 
 2. parse_actions(filepath)
-   - Baca section "## # Action"
-   - Deteksi checkbox yang checked [x]:
+   - Read section "## # Action"
+   - Detect checked [x] checkboxes:
      * read      → bool
      * reply     → bool
      * archive   → bool
-     * forward   → str (ambil teks setelah "→")
+     * forward   → str (text after "→")
 
-3. Jika TIDAK ADA aksi yang checked (semua false/None):
-   - skip file (belum di-review)
+3. If NO actions are checked (all false/None):
+   - skip file (not yet reviewed)
    - return
 
-4. Jika HANYA `read` yang checked (dan lainnya false/None):
+4. If ONLY `read` is checked (all others false/None):
    - os.remove(filepath)
    - log: "Deleted {filename} (read only, no action)"
    - return
 
-5. Eksekusi aksi (urutan: reply → forward):
-   - execute_reply(filepath)   # hanya jika reply == True
-   - execute_forward(filepath, forward_target)  # hanya jika forward != None
+5. Execute actions (order: reply → forward):
+   - execute_reply(filepath)                  # only if reply == True
+   - execute_forward(filepath, forward_target) # only if forward != None
 
-6. Jika `archive` == True:
+6. If `archive` == True:
    - Update frontmatter status → "Processed"
    - move_to_archive(filepath)
-     - Pindah ke {OV_INBOX_PATH}/../05 - Archive/Emails/{filename}
-     - Jika file sudah ada di archive → tambah suffix timestamp
+     - Move to {OV_INBOX_PATH}/../05 - Archive/Emails/{filename}
+     - If file already exists in archive → append timestamp suffix
 ```
 
 ### 3. `parse_actions(filepath) → dict`
 ```
-Baca file line by line, cari section "## # Action"
-Parse baris dengan pattern (case-insensitive): "- [x] <action>"
+Read file line by line, find section "## # Action"
+Parse lines matching pattern (case-insensitive): "- [x] <action>"
 
-Nama action yang valid (sesuai template Email.md):
+Valid action names (per Email.md template):
   - "Read"    → read: True/False
   - "Reply"   → reply: True/False
   - "Archive" → archive: True/False
-  - "Forward" → forward: str (teks setelah "→") atau None
-                  - Jika baris: "- [x] Forward → email@example.com" → forward = "email@example.com"
-                  - Jika baris: "- [x] Forward → " (kosong) → forward = None (skip, jangan execute)
+  - "Forward" → forward: str (text after "→") or None
+                  - Line: "- [x] Forward → email@example.com" → forward = "email@example.com"
+                  - Line: "- [x] Forward → " (empty) → forward = None (skip, do not execute)
 
 Return:
 {
   "read": True/False,
   "reply": True/False,
   "archive": True/False,
-  "forward": "email@example.com" atau None
+  "forward": "email@example.com" or None
 }
 ```
 
 ### 4. `execute_reply(filepath)`
 ```
-1. Ambil Gmail ID dari filename: YYYY-MM-DD-{gmail_id}.md
-2. Ambil `account` dari frontmatter field `to` (email address penerima asli = akun Gmail kita)
-3. Baca konten section "## Reply" dari file
-4. Jika section Reply kosong atau hanya mengandung placeholder
-   "*(isi di sini → AI agent akan otomatis kirim)*":
+1. Extract Gmail ID from filename: YYYY-MM-DD-{gmail_id}.md
+2. Get `account` from frontmatter field `to` (original recipient = our Gmail account)
+3. Read content of "## Reply" section from file
+4. If Reply section is empty or contains only the placeholder
+   "*(fill in here → AI agent will auto-send)*":
    - log warning: "Reply section empty, skipping send"
-   - return (jangan gagalkan seluruh proses)
-5. Jalankan (sync, wait): gog gmail reply {gmail_id} -a {account} --body "{reply_content}"
-6. Jika gagal → raise Exception (STOP-ON-FAIL, file tidak dipindah, archive dibatalkan)
+   - return (do not fail the entire process)
+5. Run (sync, wait): gog gmail reply {gmail_id} -a {account} --body "{reply_content}"
+6. On failure → raise Exception (STOP-ON-FAIL: file stays in inbox, archive cancelled)
 ```
 
 ### 5. `execute_forward(filepath, target)`
 ```
-1. Ambil Gmail ID dari filename: YYYY-MM-DD-{gmail_id}.md
-2. Ambil `account` dari frontmatter field `to`
-3. Jalankan (sync, wait): gog gmail forward {gmail_id} -a {account} --to "{target}"
-4. Jika gagal → raise Exception (STOP-ON-FAIL, file tidak dipindah, archive dibatalkan)
+1. Extract Gmail ID from filename: YYYY-MM-DD-{gmail_id}.md
+2. Get `account` from frontmatter field `to`
+3. Run (sync, wait): gog gmail forward {gmail_id} -a {account} --to "{target}"
+4. On failure → raise Exception (STOP-ON-FAIL: file stays in inbox, archive cancelled)
 ```
 
 ### 6. `move_to_archive(filepath)`
 ```
-1. Pastikan dir {OV_INBOX_PATH}/../05 - Archive/Emails/ exists (mkdir jika perlu)
+1. Ensure {OV_INBOX_PATH}/../05 - Archive/Emails/ exists (mkdir if needed)
 2. shutil.move(filepath, archive_dir / filepath.name)
 ```
 
 ## Behavior Rules
-- **STOP-ON-FAIL:** Jika reply atau forward gagal (raise Exception), **batalkan seluruh sisa aksi** termasuk archive — file tetap di inbox, lanjut ke file berikutnya.
-- **Idempotent:** File dengan `status: Processed` di frontmatter → skip
-- **Sequential:** Proses satu file per satu, tidak paralel
-- **Sync execution:** Eksekusi command `gog` selalu ditunggu (sync), no timeout.
-- **Only Read = Delete:** Jika hanya `[x] Read` yang dicentang, lakukan `os.remove()`
-- **No action = Skip:** Jika belum dicentang apa pun, lewati file.
-- **Empty reply section:** Log warning tapi lanjut proses (jangan stop), archive tetap bisa jalan.
-- **Forward empty target:** Jika teks setelah `→` kosong, skip execute_forward (log warning), lanjut.
+- **STOP-ON-FAIL:** If reply or forward fails (raises Exception), **cancel all remaining actions** including archive — file stays in inbox, continue to next file.
+- **Idempotent:** Files with `status: Processed` in frontmatter → skip.
+- **Sequential:** Process one file at a time, no parallelism.
+- **Sync execution:** All `gog` commands are awaited synchronously, no timeout.
+- **Only Read = Delete:** If only `[x] Read` is checked, call `os.remove()`.
+- **No action = Skip:** If nothing is checked, skip the file.
+- **Empty reply section:** Log warning but continue (do not stop); archive can still proceed.
+- **Forward empty target:** If text after `→` is empty, skip `execute_forward` (log warning), continue.
 
 ## Error Handling
-- `gog` binary tidak ditemukan → `exit(1)` dengan pesan jelas
-- `OV_INBOX_PATH` tidak ada → `exit(1)`
-- Reply/Forward gagal → log error, **JANGAN** pindah file, lanjut ke file berikutnya
-- File permission error → log error, skip file tersebut
+- `gog` binary not found → `exit(1)` with clear error message
+- `OV_INBOX_PATH` does not exist → `exit(1)`
+- Reply/Forward failure → log error, **do NOT move file**, continue to next file
+- File permission error → log error, skip that file
 
 ## Example
 ```bash
@@ -165,6 +180,7 @@ uv run email_processor.py
 ## Changelog
 | Version | Date | Notes |
 |---|---|---|
+| 0.4.0 | 2026-04-27 | Translated to English for AI compatibility |
 | 0.3.0 | 2026-04-27 | Patch: clarify action names, account source, forward empty, STOP-ON-FAIL scope |
 | 0.2.0 | 2026-04-27 | Sync env to OV_INBOX_PATH; archive only when [x] Archive is checked |
 | 0.1.0 | 2026-04-27 | Initial spec |
