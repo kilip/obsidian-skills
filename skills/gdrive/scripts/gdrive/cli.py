@@ -55,7 +55,7 @@ def _print_files_table(rows) -> None:
 def cmd_reindex(args) -> int:
     dry_run = args.dry_run or config.is_dry_run()
     conn = db.connect(config.get_db_path())
-    reindex.run(conn, dry_run=dry_run, limit=args.limit)
+    reindex.run(conn, dry_run=dry_run, limit=args.limit, incremental=not args.full)
     return 0
 
 
@@ -129,6 +129,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_reindex.add_argument(
         "--limit", "-l", type=int,
         help="[Testing only] Cap number of files indexed. Do not use in production."
+    )
+    p_reindex.add_argument(
+        "--full", action="store_true",
+        help="Force full reindex, ignore last run timestamp."
     )
     p_reindex.set_defaults(func=cmd_reindex)
 

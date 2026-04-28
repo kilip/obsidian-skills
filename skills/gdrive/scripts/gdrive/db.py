@@ -246,3 +246,11 @@ def get_last_brief_run(conn: sqlite3.Connection) -> Optional[str]:
         "SELECT MAX(briefed_at) AS last FROM briefs WHERE brief IS NOT NULL"
     ).fetchone()
     return row["last"] if row else None
+
+
+def get_last_successful_run(conn: sqlite3.Connection) -> Optional[str]:
+    """Return the finished_at timestamp of the most recent successful index run, or None."""
+    row = conn.execute(
+        "SELECT finished_at FROM index_runs WHERE status = 'ok' ORDER BY finished_at DESC LIMIT 1"
+    ).fetchone()
+    return row["finished_at"] if row else None
