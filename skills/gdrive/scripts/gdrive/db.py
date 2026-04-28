@@ -427,6 +427,46 @@ def get_unbriefed_files(
     return rows
 
 
+def get_unextracted_files(
+    conn: sqlite3.Connection,
+    limit: int = 50,
+) -> List[sqlite3.Row]:
+    """
+    Return files that:
+    - Have a briefable MIME type (docx, pdf, xlsx, pptx)
+    - Either have no content yet, OR were modified after their last extracted_at
+    """
+    extractable_mimes = (
+        "application/vnd.openxmlformats-officedocument",
+        "application/msword",
+        "application/pdf",
+        "application/vnd.ms-excel",
+        "application/vnd.ms-powerpoint",
+    )
+    mime_clause = " OR ".join(
+        ["f.mime_type LIKE ?" for _ in extractable_mimes]
+    )
+    mime_params = [f"%{m}%" for m in extractable_mimes]
+
+    rows = conn.execute(
+        f"""
+        SELECT f.*
+        FROM files f
+        LEFT JOIN contents c ON c.file_id = f.id
+        WHERE f.is_trashed = 0
+          AND ({mime_clause})
+          AND (
+              c.file_id IS NULL
+              OR f.modified_at > c.extracted_at
+          )
+        ORDER BY f.modified_at DESC
+        LIMIT ?
+        """,
+        mime_params + [limit],
+    ).fetchall()
+    return rows
+
+
 def get_last_brief_run(conn: sqlite3.Connection) -> Optional[str]:
     """Return the ISO timestamp of the most recent brief attempt, or None."""
     row = conn.execute(

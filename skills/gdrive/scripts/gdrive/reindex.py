@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from gdrive import config, db, gog
+from gdrive import config, db, extract, gog
 
 logger = logging.getLogger(__name__)
 
@@ -116,8 +116,12 @@ def run(
                 "Reindex complete: %d scanned, %d added, %d updated, %d trashed.",
                 count, added, updated, deleted
             )
+            # Automatic extraction (issue #19)
+            extract.extract_pending(conn, dry_run=False)
         else:
             logger.info("[dry-run] complete — no writes performed.")
+            # Dry-run extraction check
+            extract.extract_pending(conn, dry_run=True)
 
     except Exception as exc:
         logger.error("Reindex failed: %s", exc)

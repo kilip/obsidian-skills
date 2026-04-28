@@ -47,7 +47,7 @@ allowed-tools:
 
 #### 1. `reindex` — Sync Drive metadata to SQLite
 
-Scans all of "My Drive" and upserts file metadata into the local DB. Run this periodically (e.g., as a daily cron job) to keep the index up to date.
+Scans all of "My Drive" and upserts file metadata into the local DB. After indexing, it automatically triggers content extraction for new or modified documents (.docx, .pdf, .xlsx, .pptx) and saves them to the `contents` table. Run this periodically (e.g., as a daily cron job) to keep the index and content cache up to date.
 
 ```bash
 uv run python -m gdrive.cli reindex
@@ -243,10 +243,11 @@ CLI (cli.py)
 4. **Brief only files that need it** — `db.get_unbriefed_files()` filters out files that already have an up-to-date brief.
 5. **Robust since advancing** — `since` always advances after a brief run, even if all files in that run failed, to prevent infinite loops.
 6. **Automatic retries** — AI briefing calls automatically retry up to 3 times with exponential backoff on failure.
-7. **Document Caching** — Extracted text is saved to the `contents` table. Subsequent briefs for the same file skip download/extraction if the file hasn't been modified (feature #16).
-8. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
-8. **Always clean up tmp files** — `brief.py` ensures downloaded tmp files are always deleted.
-7. **Log to file AND stdout** — all log output is written to both `OS_GDRIVE_LOG_PATH` and stdout simultaneously.
+7. **Automatic Content Extraction** — After `reindex` completes, `extract_pending()` is automatically called to download and extract text/markdown from new or modified documents.
+8. **Document Caching** — Extracted text is saved to the `contents` table. Subsequent briefs for the same file skip download/extraction if the file hasn't been modified (feature #16).
+9. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
+10. **Always clean up tmp files** — Downloaded tmp files are always deleted after extraction.
+11. **Log to file AND stdout** — all log output is written to both `OS_GDRIVE_LOG_PATH` and stdout simultaneously.
 
 ---
 
