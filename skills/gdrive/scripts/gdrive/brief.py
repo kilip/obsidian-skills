@@ -118,34 +118,55 @@ def _brief_one(conn, row, dry_run: bool) -> bool:
     prefix = "[dry-run] " if dry_run else ""
     logger.info("%sBriefing: %s (%s)", prefix, name, file_id)
 
+    # 1. Check cache (issue #16)
+    content_record = db.get_content_record(conn, file_id)
+    text = None
+    
+    if content_record:
+        extracted_at = content_record["extracted_at"]
+        modified_at = row["modified_at"]
+        if modified_at <= extracted_at:
+            logger.info("  ✓ Using cached content (last extracted: %s)", extracted_at)
+            text = content_record["content"]
+
     tmp_path = None
     try:
-        # 1. Reserve a tmp file path (using mkstemp to avoid pre-creating the file content)
-        fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix="gdrive_brief_")
-        os.close(fd)
+        if text is None:
+            # Reserve a tmp file path
+            fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix="gdrive_brief_")
+            os.close(fd)
+
+            if dry_run:
+                logger.info("[dry-run] would download + extract: %s", name)
+                # For dry-run, we don't have text, but we skip Gemini anyway
+                return True
+
+            # 2. Download
+            _download_file(file_id, tmp_path)
+
+            # 3. Extract text
+            text = extractors.extract_text(tmp_path, mime)
+            if not text.strip():
+                db.save_brief(conn, file_id, brief=None, error="No extractable text found.")
+                logger.warning("  Empty / no text: %s", name)
+                return False
+
+            # 4. Save to cache (issue #16)
+            db.save_content(conn, file_id, text)
+            logger.debug("  Content cached for: %s", name)
 
         if dry_run:
-            logger.info("[dry-run] would download + brief: %s", name)
+            logger.info("[dry-run] would call Gemini to summarize: %s", name)
             return True
 
-        # 2. Download
-        _download_file(file_id, tmp_path)
-
-        # 3. Extract text (delegated to brief subpackage)
-        text = extractors.extract_text(tmp_path, mime)
-        if not text.strip():
-            db.save_brief(conn, file_id, brief=None, error="No extractable text found.")
-            logger.warning("  Empty / no text: %s", name)
-            return False
-
-        # 4. Truncate if too long
+        # 5. Truncate if too long
         if len(text) > MAX_TEXT_CHARS:
             text = text[:MAX_TEXT_CHARS] + "\n\n[... text truncated ...]"
 
-        # 5. Call Gemini
+        # 6. Call Gemini
         brief = _call_gemini_with_retry(name, mime, text)
 
-        # 6. Save to DB
+        # 7. Save brief to DB
         db.save_brief(conn, file_id, brief=brief)
         logger.info("  ✓ Brief saved: %s", name)
         return True

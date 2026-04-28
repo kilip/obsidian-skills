@@ -8,13 +8,28 @@ def extract(path: str) -> str:
     prs = Presentation(path)
     slides = []
     for i, slide in enumerate(prs.slides, 1):
-        texts = []
+        title = None
+        bullets = []
         for shape in slide.shapes:
             if shape.has_text_frame:
-                for para in shape.text_frame.paragraphs:
-                    t = para.text.strip()
-                    if t:
-                        texts.append(t)
-        if texts:
-            slides.append(f"[Slide {i}]\n" + "\n".join(texts))
+                text = shape.text_frame.text.strip()
+                if not text:
+                    continue
+                
+                if title is None:
+                    title = text
+                else:
+                    bullets.append(text)
+        
+        if title or bullets:
+            header = f"## Slide {i}"
+            if title:
+                header += f": {title}"
+            
+            content = [header]
+            for b in bullets:
+                content.append(f"- {b}")
+            
+            slides.append("\n".join(content))
+            
     return "\n\n".join(slides)

@@ -13,6 +13,7 @@ _QUERY_INCREMENTAL = "trashed = false and modifiedTime > '{since}'"
 _QUERY_TRASHED = "trashed = true"
 
 
+
 def run(
     conn,
     dry_run: Optional[bool] = None,
@@ -27,6 +28,10 @@ def run(
 
     run_id = db.start_run(conn, query=query) if not dry_run else -1
     added = updated = deleted = 0
+    
+    # Exclusion and Path Cache
+    exclude_folders = config.get_exclude_folders()
+    folder_cache: dict[str, str] = {} # Maps folder_id -> full_path (or "__EXCLUDED__")
 
     # Resume logic
     resume_token = None
@@ -53,10 +58,29 @@ def run(
             if limit and count >= limit:
                 logger.info("%sLimit reached (%d), stopping.", prefix, limit)
                 break
+            
+            # Resolve folder path and check exclusion
+            parents = f.get("parents") or []
+            parent_id = parents[0] if parents else None
+            folder_path = resolve_folder_path(parent_id, folder_cache, exclude_folders)
+            
+            if folder_path == "__EXCLUDED__":
+                # logger.debug("Skipping excluded file: %s", f.get("name"))
+                continue
+
+            # If this is a folder, also check if it's excluded itself
+            if f.get("mimeType") == "application/vnd.google-apps.folder":
+                name = f.get("name", "")
+                if name.lower() in exclude_folders:
+                    folder_cache[f["id"]] = "__EXCLUDED__"
+                    continue
+                # Update cache for this folder
+                current_folder_path = f"{folder_path}/{name}" if folder_path else name
+                folder_cache[f["id"]] = current_folder_path
 
             action = "DRY-RUN"
             if not dry_run:
-                action = db.upsert_file(conn, f)
+                action = db.upsert_file(conn, f, folder_path=folder_path)
                 if action == "added":
                     added += 1
                 else:
@@ -71,7 +95,7 @@ def run(
                     conn.commit()
                     logger.info("  ... %d added, %d updated so far", added, updated)
             else:
-                logger.info("[dry-run] would upsert: %s (%s)", f.get("name"), f.get("id"))
+                logger.info("[dry-run] would upsert: %s (path: %s)", f.get("name"), folder_path)
             
             count += 1
 
@@ -103,6 +127,38 @@ def run(
                 status="error", error_msg=str(exc)
             )
         raise
+
+
+def resolve_folder_path(folder_id: Optional[str], folder_cache: dict[str, str], exclude_folders: set[str]) -> str:
+    """Recursively resolve full path for a folder ID and handle exclusion."""
+    if not folder_id:
+        return ""
+    if folder_id in folder_cache:
+        return folder_cache[folder_id]
+    
+    try:
+        f = gog.drive_get(folder_id)
+        name = f.get("name", "Unknown")
+        
+        # Handle Drive root
+        if name == "My Drive" or not f.get("parents"):
+            folder_cache[folder_id] = ""
+            return ""
+            
+        parent_id = f.get("parents", [None])[0]
+        parent_path = resolve_folder_path(parent_id, folder_cache, exclude_folders)
+        
+        if parent_path == "__EXCLUDED__" or name.lower() in exclude_folders:
+            path = "__EXCLUDED__"
+        else:
+            path = f"{parent_path}/{name}" if parent_path else name
+            
+        folder_cache[folder_id] = path
+        return path
+    except Exception as e:
+        logger.warning("Failed to resolve folder path for %s: %s", folder_id, e)
+        folder_cache[folder_id] = ""
+        return ""
 
 
 def _mark_trashed(conn, dry_run: bool) -> int:

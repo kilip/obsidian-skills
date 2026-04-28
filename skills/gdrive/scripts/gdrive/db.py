@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS files (
     parent_id       TEXT,
     web_view_link   TEXT,
     is_trashed      INTEGER DEFAULT 0,
+    category        TEXT,
+    tags            TEXT,
+    folder_path     TEXT,
     indexed_at      TEXT NOT NULL
 );
 
@@ -46,6 +49,12 @@ CREATE TABLE IF NOT EXISTS briefs (
     error           TEXT,
     briefed_at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS contents (
+    file_id         TEXT PRIMARY KEY REFERENCES files(id),
+    content         TEXT,
+    extracted_at    TEXT NOT NULL
+);
 """
 
 
@@ -73,12 +82,34 @@ def _migrate(conn: sqlite3.Connection) -> None:
         logger.info("Migrating DB: adding 'last_page_token' column to index_runs")
         conn.execute("ALTER TABLE index_runs ADD COLUMN last_page_token TEXT")
 
+    # Enrich 'files' table (issue #17)
+    cursor = conn.execute("PRAGMA table_info(files)")
+    columns = [row["name"] for row in cursor.fetchall()]
+    if "category" not in columns:
+        logger.info("Migrating DB: adding 'category' column to files")
+        conn.execute("ALTER TABLE files ADD COLUMN category TEXT")
+    if "tags" not in columns:
+        logger.info("Migrating DB: adding 'tags' column to files")
+        conn.execute("ALTER TABLE files ADD COLUMN tags TEXT")
+    if "folder_path" not in columns:
+        logger.info("Migrating DB: adding 'folder_path' column to files")
+        conn.execute("ALTER TABLE files ADD COLUMN folder_path TEXT")
+
+    # Create 'contents' table if it doesn't exist (added in issue #16)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS contents (
+            file_id         TEXT PRIMARY KEY REFERENCES files(id),
+            content         TEXT,
+            extracted_at    TEXT NOT NULL
+        )
+    """)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def upsert_file(conn: sqlite3.Connection, f: Dict[str, Any]) -> str:
+def upsert_file(conn: sqlite3.Connection, f: Dict[str, Any], folder_path: Optional[str] = None) -> str:
     """
     Insert or update a file record.
     Returns 'added' or 'updated'.
@@ -99,8 +130,8 @@ def upsert_file(conn: sqlite3.Connection, f: Dict[str, Any]) -> str:
     conn.execute(
         """
         INSERT INTO files (id, name, mime_type, size_bytes, owner, modified_at,
-                           parent_id, web_view_link, is_trashed, indexed_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
+                           parent_id, web_view_link, is_trashed, folder_path, indexed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name          = excluded.name,
             mime_type     = excluded.mime_type,
@@ -110,6 +141,7 @@ def upsert_file(conn: sqlite3.Connection, f: Dict[str, Any]) -> str:
             parent_id     = excluded.parent_id,
             web_view_link = excluded.web_view_link,
             is_trashed    = 0,
+            folder_path   = excluded.folder_path,
             indexed_at    = excluded.indexed_at
         """,
         (
@@ -121,6 +153,7 @@ def upsert_file(conn: sqlite3.Connection, f: Dict[str, Any]) -> str:
             f.get("modifiedTime"),
             parent_id,
             f.get("webViewLink"),
+            folder_path,
             now,
         ),
     )
@@ -317,6 +350,33 @@ def save_brief(
         (file_id, brief, error, _now()),
     )
     conn.commit()
+
+
+def save_content(
+    conn: sqlite3.Connection,
+    file_id: str,
+    content: str,
+) -> None:
+    """Upsert extracted content for a given file."""
+    conn.execute(
+        """
+        INSERT INTO contents (file_id, content, extracted_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(file_id) DO UPDATE SET
+            content      = excluded.content,
+            extracted_at = excluded.extracted_at
+        """,
+        (file_id, content, _now()),
+    )
+    conn.commit()
+
+
+def get_content_record(conn: sqlite3.Connection, file_id: str) -> Optional[sqlite3.Row]:
+    """Fetch content and extracted_at for a file."""
+    return conn.execute(
+        "SELECT content, extracted_at FROM contents WHERE file_id = ?",
+        (file_id,),
+    ).fetchone()
 
 
 def get_unbriefed_files(

@@ -133,6 +133,7 @@ All configuration is read from environment variables. Prefix: `OS_GDRIVE_`.
 | `OS_GDRIVE_DRY_RUN` | ❌ | `0` | Set to `1`/`true`/`yes` to enable dry-run mode globally |
 | `OS_GDRIVE_PAGE_DELAY` | ❌ | `0.1` | Delay in seconds between reindex pages |
 | `OS_GDRIVE_BRIEF_DELAY` | ❌ | `0.5` | Delay in seconds between file briefing |
+| `OS_GDRIVE_EXCLUDE_FOLDERS` | ❌ | — | Comma-separated folder names to skip recursively |
 
 ---
 
@@ -180,6 +181,9 @@ CLI (cli.py)
 | `parent_id` | TEXT | Parent folder ID |
 | `web_view_link` | TEXT | Google Drive URL |
 | `is_trashed` | INTEGER | 0 = active, 1 = in trash |
+| `category` | TEXT | Document category (set by AI) |
+| `tags` | TEXT | JSON array of keywords (set by AI) |
+| `folder_path` | TEXT | Full path from Drive root |
 | `indexed_at` | TEXT | Timestamp when the record was last indexed |
 
 **`index_runs`** — log of each reindex session:
@@ -201,6 +205,14 @@ CLI (cli.py)
 | `error` | Error message if briefing failed |
 | `briefed_at` | ISO timestamp of the last brief attempt |
 
+**`contents`** — cached document text/markdown (feature #16):
+
+| Column | Description |
+|---|---|
+| `file_id` | Foreign key to `files.id` |
+| `content` | The raw extracted text/markdown |
+| `extracted_at` | ISO timestamp of the last extraction |
+
 ---
 
 ## Behavior Rules
@@ -211,7 +223,8 @@ CLI (cli.py)
 4. **Brief only files that need it** — `db.get_unbriefed_files()` filters out files that already have an up-to-date brief.
 5. **Robust since advancing** — `since` always advances after a brief run, even if all files in that run failed, to prevent infinite loops.
 6. **Automatic retries** — AI briefing calls automatically retry up to 3 times with exponential backoff on failure.
-7. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
+7. **Document Caching** — Extracted text is saved to the `contents` table. Subsequent briefs for the same file skip download/extraction if the file hasn't been modified (feature #16).
+8. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
 8. **Always clean up tmp files** — `brief.py` ensures downloaded tmp files are always deleted.
 7. **Log to file AND stdout** — all log output is written to both `OS_GDRIVE_LOG_PATH` and stdout simultaneously.
 

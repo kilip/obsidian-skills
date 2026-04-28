@@ -56,3 +56,7 @@ def get_page_delay() -> float:
 def get_brief_delay() -> float:
     return float(os.environ.get("OS_GDRIVE_BRIEF_DELAY", "0.5"))
 
+
+def get_exclude_folders() -> set[str]:
+    raw = os.environ.get("OS_GDRIVE_EXCLUDE_FOLDERS", "")
+    return {name.strip().lower() for name in raw.split(",") if name.strip()}

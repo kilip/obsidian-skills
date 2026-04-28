@@ -109,6 +109,13 @@ def drive_search_all(
         time.sleep(config.get_page_delay())  # pause between pages
 
 
+def drive_get(file_id: str) -> Dict[str, Any]:
+    """Fetch metadata for a single file/folder by ID."""
+    result = _run(["drive", "get", file_id, "--json"])
+    data = json.loads(result.stdout)
+    # gog drive get returns { "file": { ... } }
+    return data.get("file", {})
+
 def drive_download(file_id: str, output_path: str) -> None:
     """
     Download a Drive file by ID to output_path via `gog drive download`.
