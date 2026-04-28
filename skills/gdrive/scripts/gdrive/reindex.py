@@ -60,9 +60,9 @@ def run(
 
         if not dry_run:
             conn.commit()
-            db.finish_run(conn, run_id, added, updated, deleted=0, status="ok")
+            db.finish_run(conn, run_id, scanned=count, added=added, updated=updated, deleted=0, status="ok")
             logger.info(
-                "Reindex complete: %d added, %d updated.", added, updated
+                "Reindex complete: %d scanned, %d added, %d updated.", count, added, updated
             )
         else:
             logger.info("Dry-run complete — no writes performed.")
@@ -71,7 +71,7 @@ def run(
         logger.error("Reindex failed: %s", exc)
         if not dry_run and run_id != -1:
             db.finish_run(
-                conn, run_id, added, updated, deleted=0,
+                conn, run_id, scanned=count, added=added, updated=updated, deleted=0,
                 status="error", error_msg=str(exc)
             )
         raise

@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS index_runs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at      TEXT NOT NULL,
     finished_at     TEXT,
+    files_scanned   INTEGER DEFAULT 0,
     files_added     INTEGER DEFAULT 0,
     files_updated   INTEGER DEFAULT 0,
     files_deleted   INTEGER DEFAULT 0,
@@ -120,6 +121,7 @@ def start_run(conn: sqlite3.Connection) -> int:
 def finish_run(
     conn: sqlite3.Connection,
     run_id: int,
+    scanned: int,
     added: int,
     updated: int,
     deleted: int,
@@ -129,11 +131,11 @@ def finish_run(
     conn.execute(
         """
         UPDATE index_runs
-        SET finished_at = ?, files_added = ?, files_updated = ?,
+        SET finished_at = ?, files_scanned = ?, files_added = ?, files_updated = ?,
             files_deleted = ?, status = ?, error_msg = ?
         WHERE id = ?
         """,
-        (_now(), added, updated, deleted, status, error_msg, run_id),
+        (_now(), scanned, added, updated, deleted, status, error_msg, run_id),
     )
     conn.commit()
 
