@@ -128,7 +128,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_reindex.add_argument(
         "--limit", "-l", type=int,
-        help="Max number of files to index"
+        help="[Testing only] Cap number of files indexed. Do not use in production."
     )
     p_reindex.set_defaults(func=cmd_reindex)
 
