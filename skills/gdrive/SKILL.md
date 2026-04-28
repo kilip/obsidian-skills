@@ -60,8 +60,8 @@ Fast offline search — no internet connection required (all results come from S
 
 ```bash
 uv run python -m gdrive.cli search --name "report"
-uv run python -m gdrive.cli search --mime pdf --owner me@gmail.com --limit 20
-uv run python -m gdrive.cli search --name "budget" --json   # JSON output
+uv run python -m gdrive.cli search --mime pdf --after 7d --limit 20
+uv run python -m gdrive.cli search --brief-contains "budget" --json
 ```
 
 | Flag | Shortcut | Default | Description |
@@ -70,8 +70,38 @@ uv run python -m gdrive.cli search --name "budget" --json   # JSON output
 | `--mime` | `-m` | — | Filter by MIME type or shortcut (`pdf`, `sheet`, `doc`, `slide`, etc.) |
 | `--owner` | `-o` | — | Filter by owner email (substring match) |
 | `--parent` | `-p` | — | Filter by parent folder ID |
-| `--limit` | `-l` | 50 | Maximum number of results |
-| `--json` | `-j` | false | Output results as JSON |
+| `--after` | — | — | Filter by modification date (ISO `YYYY-MM-DD` or relative `7d`, `24h`) |
+| `--before` | — | — | Filter by modification date (ISO or relative) |
+| `--has-brief` | — | — | Only show files that have a successful AI brief |
+| `--no-brief` | — | — | Only show files that do not have an AI brief yet |
+| `--brief-contains` | — | — | Filter by text content inside the AI brief (substring) |
+| `--include-trashed` | — | — | Include files that are in the Google Drive trash |
+| `--trashed-only` | — | — | Show only files that are in the trash |
+| `--sort-by` | — | `modified` | Sort results by `modified`, `size`, or `name` |
+| `--fields` | — | — | Comma-separated list of fields to return (e.g., `id,name,mime_type`) |
+| `--limit` | `-l` | 10 | Maximum number of results |
+| `--json` | `-j` | true | Output results as JSON (default) |
+| `--table` | `-t` | false | Output results as a human-readable table |
+
+##### Search Output Example (JSON)
+
+```json
+[
+  {
+    "id": "1O6hxCYLmv756-H2ozjZCEUWXs4KTQDs9",
+    "name": "Project Proposal 2025.pdf",
+    "mime_type": "application/pdf",
+    "size_bytes": 882194,
+    "owner": "me@gmail.com",
+    "modified_at": "2025-04-27T19:04:46Z",
+    "parent_id": "1myCpmY-_C3fVpjKE0d7M4fJEYcHrGcaN",
+    "web_view_link": "https://drive.google.com/...",
+    "is_trashed": 0,
+    "has_brief": true,
+    "brief_preview": "This document outlines the strategic plan for 2025, focusing on..."
+  }
+]
+```
 
 #### 3. `brief` — Generate AI summaries for documents
 
@@ -101,6 +131,20 @@ All configuration is read from environment variables. Prefix: `OS_GDRIVE_`.
 | `OS_GDRIVE_LOG_PATH` | ❌ | `~/.gdrive/gdrive.log` | Path to the log file |
 | `OS_GDRIVE_GOG_BIN` | ❌ | `gog` | Full path to the `gog` binary if not in PATH |
 | `OS_GDRIVE_DRY_RUN` | ❌ | `0` | Set to `1`/`true`/`yes` to enable dry-run mode globally |
+
+---
+
+## Usage Tips & Guidance
+
+### When to run `reindex` or `brief`
+- **Empty results?** If `search` returns nothing even for broad queries, the local index might be empty. Run `uv run python -m gdrive.cli reindex` to sync metadata.
+- **No briefs?** If `has_brief` is always `false`, run `uv run python -m gdrive.cli brief` to generate AI summaries for your documents.
+- **Outdated data?** The index is local. If you just uploaded a file via the web UI, it won't show up in `search` until you `reindex`.
+
+### When NOT to use this skill
+- **File content editing**: This skill is for **indexing and summarizing**, not for editing the contents of Google Docs or sheets.
+- **Real-time collaboration**: Use the Google Drive web interface for real-time collaboration. The local index is a snapshot.
+- **Large file downloads**: While the skill can download files for briefing, it is not optimized as a general-purpose file downloader for the user.
 
 ---
 
