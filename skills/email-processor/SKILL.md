@@ -21,7 +21,7 @@ allowed-tools:
 ## Prerequisites
 
 - `gog` — Google OAuth CLI tool (for reply/forward via Gmail)
-- `OV_INBOX_PATH` — path to the Obsidian Inbox folder
+- `OS_INBOX_PATH` — path to the Obsidian Inbox folder
 
 ## Usage
 
@@ -30,17 +30,17 @@ Run this skill after the user has finished reviewing emails in `00 - Inbox/Email
 
 ```bash
 cd skills/email-processor
-export OV_INBOX_PATH="/path/to/obsidian/inbox"
+export OS_INBOX_PATH="/path/to/obsidian/inbox"
 uv run email_processor.py
 ```
 
 ### Input
-- `.md` files in `{OV_INBOX_PATH}/Emails/`
+- `.md` files in `{OS_INBOX_PATH}/Emails/`
 - Files must follow the `email-reader/template/Email.md` format
 - Files with frontmatter `status: Processed` will be skipped (idempotent)
 
 ### Output
-- Files with `[x] Archive` → executed → moved to `{OV_INBOX_PATH}/../05 - Archive/Emails/`
+- Files with `[x] Archive` → executed → moved to `{OS_INBOX_PATH}/../05 - Archive/Emails/`
 - Files with `[x] Reply` or `[x] Forward` → executed → **not** auto-moved unless `[x] Archive` is also checked
 - Files with only `[x] Read` checked → permanently deleted
 - Files with no actions checked → skipped
@@ -50,17 +50,17 @@ uv run email_processor.py
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `OV_INBOX_PATH` | ✅ | — | Absolute path to the Obsidian Inbox folder |
-| `GOG_BIN` | ❌ | `gog` | Path to `gog` binary |
-| `GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model (for reply assistance) |
+| `OS_INBOX_PATH` | ✅ | — | Absolute path to the Obsidian Inbox folder |
+| `OS_GOG_BIN` | ❌ | `gog` | Path to `gog` binary |
+| `OS_GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model (for reply assistance) |
 
 ## Script Logic: `email_processor.py`
 
 ### 1. Entrypoint & Validation
 ```
 main()
-  └── validate_env()         # check OV_INBOX_PATH exists, gog binary available
-  └── get_inbox_files()      # glob all *.md in {OV_INBOX_PATH}/Emails/
+  └── validate_env()         # check OS_INBOX_PATH exists, gog binary available
+  └── get_inbox_files()      # glob all *.md in {OS_INBOX_PATH}/Emails/
   └── for each file → process_email(file)
 ```
 
@@ -93,7 +93,7 @@ main()
 6. If `archive` == True:
    - Update frontmatter status → "Processed"
    - move_to_archive(filepath)
-     - Move to {OV_INBOX_PATH}/../05 - Archive/Emails/{filename}
+     - Move to {OS_INBOX_PATH}/../05 - Archive/Emails/{filename}
      - If file already exists in archive → append timestamp suffix
 ```
 
@@ -142,7 +142,7 @@ Return:
 
 ### 6. `move_to_archive(filepath)`
 ```
-1. Ensure {OV_INBOX_PATH}/../05 - Archive/Emails/ exists (mkdir if needed)
+1. Ensure {OS_INBOX_PATH}/../05 - Archive/Emails/ exists (mkdir if needed)
 2. shutil.move(filepath, archive_dir / filepath.name)
 ```
 
@@ -158,13 +158,13 @@ Return:
 
 ## Error Handling
 - `gog` binary not found → `exit(1)` with clear error message
-- `OV_INBOX_PATH` does not exist → `exit(1)`
+- `OS_INBOX_PATH` does not exist → `exit(1)`
 - Reply/Forward failure → log error, **do NOT move file**, continue to next file
 - File permission error → log error, skip that file
 
 ## Example
 ```bash
-export OV_INBOX_PATH="/home/toni/obsidian/second-brain/00 - Inbox"
+export OS_INBOX_PATH="/home/toni/obsidian/second-brain/00 - Inbox"
 uv run email_processor.py
 # Processing: 2026-04-27-19dce188c43be970.md
 #   [REPLY] Sending reply to info@futureskills.id...
@@ -182,5 +182,5 @@ uv run email_processor.py
 |---|---|---|
 | 0.4.0 | 2026-04-27 | Translated to English for AI compatibility |
 | 0.3.0 | 2026-04-27 | Patch: clarify action names, account source, forward empty, STOP-ON-FAIL scope |
-| 0.2.0 | 2026-04-27 | Sync env to OV_INBOX_PATH; archive only when [x] Archive is checked |
+| 0.2.0 | 2026-04-27 | Sync env to OS_INBOX_PATH; archive only when [x] Archive is checked |
 | 0.1.0 | 2026-04-27 | Initial spec |

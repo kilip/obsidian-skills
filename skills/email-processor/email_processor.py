@@ -5,12 +5,12 @@
 """
 email_processor.py — Obsidian Email Processor Skill.
 
-Reads reviewed email notes from {OV_INBOX_PATH}/Emails/, executes checked
+Reads reviewed email notes from {OS_INBOX_PATH}/Emails/, executes checked
 actions (Reply, Forward, Archive), and deletes files that have only [x] Read.
 
 Usage:
     cd skills/email-processor
-    export OV_INBOX_PATH="/path/to/obsidian/inbox"
+    export OS_INBOX_PATH="/path/to/obsidian/inbox"
     uv run email_processor.py
 """
 
@@ -24,8 +24,8 @@ from pathlib import Path
 from typing import Optional
 
 # --- Configuration ---
-OV_INBOX_PATH_ENV = os.environ.get("OV_INBOX_PATH", "")
-GOG_BIN = os.environ.get("GOG_BIN", "gog")
+OS_INBOX_PATH_ENV = os.environ.get("OS_INBOX_PATH", "")
+GOG_BIN = os.environ.get("OS_GOG_BIN", "gog")
 
 # Globals (resolved after validate_env)
 INBOX_PATH: Path = Path(".")
@@ -42,13 +42,13 @@ PLACEHOLDER_REPLY = "*(isi di sini → AI agent akan otomatis kirim)*"
 def validate_env() -> None:
     global INBOX_PATH, EMAILS_DIR, ARCHIVE_DIR
 
-    if not OV_INBOX_PATH_ENV:
-        print("[ERROR] OV_INBOX_PATH is not set.", file=sys.stderr)
+    if not OS_INBOX_PATH_ENV:
+        print("[ERROR] OS_INBOX_PATH is not set.", file=sys.stderr)
         sys.exit(1)
 
-    INBOX_PATH = Path(OV_INBOX_PATH_ENV)
+    INBOX_PATH = Path(OS_INBOX_PATH_ENV)
     if not INBOX_PATH.exists():
-        print(f"[ERROR] OV_INBOX_PATH does not exist: {INBOX_PATH}", file=sys.stderr)
+        print(f"[ERROR] OS_INBOX_PATH does not exist: {INBOX_PATH}", file=sys.stderr)
         sys.exit(1)
 
     EMAILS_DIR = INBOX_PATH / "Emails"
@@ -56,7 +56,7 @@ def validate_env() -> None:
         print(f"[ERROR] Emails dir not found: {EMAILS_DIR}", file=sys.stderr)
         sys.exit(1)
 
-    # Archive dir lives next to inbox: {OV_INBOX_PATH}/../05 - Archive/Emails
+    # Archive dir lives next to inbox: {OS_INBOX_PATH}/../05 - Archive/Emails
     ARCHIVE_DIR = INBOX_PATH.parent / "05 - Archive" / "Emails"
 
     # Verify gog binary

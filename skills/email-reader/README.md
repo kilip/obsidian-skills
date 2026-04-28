@@ -14,14 +14,14 @@ Fetch unread emails from Gmail and save them as Obsidian-ready Markdown notes.
 
 | Variable | Description | Example |
 |----------|-------------|---------|
-| `OV_INBOX_PATH` | Path to your Obsidian Vault's **Inbox** directory | `/path/to/vault/00 - Inbox` |
-| `GEMINI_MODEL` | (Optional) Gemini model for briefing | `gemini-2.5-flash-lite` |
+| `OS_INBOX_PATH` | Path to your Obsidian Vault's **Inbox** directory | `/path/to/vault/00 - Inbox` |
+| `OS_GEMINI_MODEL` | (Optional) Gemini model for briefing | `gemini-2.5-flash-lite` |
 
 ## Usage
 
 ```bash
 # Set your vault's inbox path
-export OV_INBOX_PATH="/path/to/obsidian-vault/00 - Inbox"
+export OS_INBOX_PATH="/path/to/obsidian-vault/00 - Inbox"
 
 # Run the skill
 uv run email_reader.py
@@ -29,8 +29,8 @@ uv run email_reader.py
 
 ## Features
 
-1.  **Direct-to-Vault**: Saves emails directly into `OV_INBOX_PATH/Emails/`.
-2.  **Unsubscribe Manager**: Automatically adds promo links to `OV_INBOX_PATH/Unsubscribe.md`.
+1.  **Direct-to-Vault**: Saves emails directly into `OS_INBOX_PATH/Emails/`.
+2.  **Unsubscribe Manager**: Automatically adds promo links to `OS_INBOX_PATH/Unsubscribe.md`.
 3.  **Deduplication**: Checks both the inbox and the entire vault to prevent duplicate imports.
 4.  **Auto Mark Read**: Promotional emails are marked as read immediately to keep your Gmail clean.
 5.  **HTML to MD**: Rich emails are converted to high-quality Markdown using `defuddle`.

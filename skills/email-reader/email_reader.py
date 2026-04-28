@@ -16,9 +16,9 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 
 # --- Configuration (Mandatory ENV) ---
-INBOX_PATH_ENV = os.environ.get("OV_INBOX_PATH")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite")
-GOG_BIN = os.environ.get("GOG_BIN", "gog")
+INBOX_PATH_ENV = os.environ.get("OS_INBOX_PATH")
+GEMINI_MODEL = os.environ.get("OS_GEMINI_MODEL", "gemini-2.5-flash-lite")
+GOG_BIN = os.environ.get("OS_GOG_BIN", "gog")
 
 # Global paths
 SCRIPT_DIR = Path(__file__).parent
@@ -34,7 +34,7 @@ def validate_env() -> None:
     """Strictly validates environment and dependencies."""
     global INBOX_PATH, EMAILS_DIR, VAULT_ROOT
     if not INBOX_PATH_ENV:
-        print("\n[ERROR] OV_INBOX_PATH is not set.", file=sys.stderr)
+        print("\n[ERROR] OS_INBOX_PATH is not set.", file=sys.stderr)
         sys.exit(1)
     INBOX_PATH = Path(INBOX_PATH_ENV)
     EMAILS_DIR = INBOX_PATH / "Emails"

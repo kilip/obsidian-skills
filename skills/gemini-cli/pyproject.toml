@@ -1,0 +1,13 @@
+[project]
+name = "gemini-cli"
+version = "0.1.0"
+description = "Reusable Gemini CLI wrapper — prompt from arg, file, or stdin"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+gemini-cli = "gemini_cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,234 @@
+---
+name: gdrive
+description: >
+  Use this skill whenever the user wants to index Google Drive, sync Drive metadata,
+  search Drive files, or generate AI summaries (briefs) for Drive documents such as
+  Word, PDF, Excel, or PowerPoint files. This skill maintains a local SQLite index
+  of all Drive files via the gog CLI, supports fast offline search, and can generate
+  concise AI briefs using Gemini CLI for any supported document format.
+allowed-tools:
+  - "Bash"
+  - "Read"
+  - "Write"
+---
+
+# SKILL: Google Drive Indexer & Briefer
+
+## Overview
+
+> This skill connects Google Drive with an Obsidian vault using a local SQLite database as an index.
+> It provides three core capabilities: **reindex** (sync file metadata from Drive to a local DB),
+> **search** (fast offline file querying against the local index), and **brief** (generate AI summaries
+> for Word/PDF/Excel/PPT documents using Gemini CLI).
+> All Google Drive operations are performed via the `gog` CLI as a subprocess.
+
+---
+
+## Prerequisites
+
+| Tool / Dependency | Notes |
+|---|---|
+| `gog` CLI | Google Drive CLI. Install from https://gogcli.sh or set its path via `OS_GDRIVE_GOG_BIN` |
+| `uv` | Python package manager. All scripts are executed via `uv run` |
+| Python ≥ 3.11 | Minimum supported version |
+| `python-docx` | Text extraction from `.docx` files (auto-installed via pyproject.toml) |
+| `pdfplumber` | Text extraction from `.pdf` files |
+| `openpyxl` | Text extraction from `.xlsx` files |
+| `python-pptx` | Text extraction from `.pptx` files |
+| `tabulate` | Optional — pretty-print table output for the `search` command |
+| Gemini CLI | Required for the `brief` feature (AI summarization) — must be available in PATH |
+| `GOG_ACCOUNT` | Must be set to your Google account email |
+
+---
+
+## Usage
+
+### Subcommands
+
+#### 1. `reindex` — Sync Drive metadata to SQLite
+
+Scans all of "My Drive" and upserts file metadata into the local DB. Run this periodically (e.g., as a daily cron job) to keep the index up to date.
+
+```bash
+uv run python -m gdrive.cli reindex
+uv run python -m gdrive.cli reindex --dry-run   # preview without writing to DB
+```
+
+#### 2. `search` — Query the local index
+
+Fast offline search — no internet connection required (all results come from SQLite).
+
+```bash
+uv run python -m gdrive.cli search --name "report"
+uv run python -m gdrive.cli search --mime pdf --owner me@gmail.com --limit 20
+uv run python -m gdrive.cli search --name "budget" --json   # JSON output
+```
+
+| Flag | Shortcut | Default | Description |
+|---|---|---|---|
+| `--name` | `-n` | — | Filter by filename (substring match) |
+| `--mime` | `-m` | — | Filter by MIME type or shortcut (`pdf`, `sheet`, `doc`, `slide`, etc.) |
+| `--owner` | `-o` | — | Filter by owner email (substring match) |
+| `--parent` | `-p` | — | Filter by parent folder ID |
+| `--limit` | `-l` | 50 | Maximum number of results |
+| `--json` | `-j` | false | Output results as JSON |
+
+#### 3. `brief` — Generate AI summaries for documents
+
+Generates AI-powered summaries (via Gemini CLI) for Word/PDF/Excel/PPT files that have never been briefed, or that have been modified since their last brief. Output is saved to the `briefs` table in SQLite.
+
+```bash
+uv run python -m gdrive.cli brief
+uv run python -m gdrive.cli brief --limit 20
+uv run python -m gdrive.cli brief --dry-run    # preview without downloading or calling Gemini
+```
+
+| Flag | Shortcut | Default | Description |
+|---|---|---|---|
+| `--limit` | `-l` | 50 | Maximum number of files to brief per run |
+| `--dry-run` | — | false | Simulate without downloading files or calling Gemini |
+
+---
+
+## Configuration
+
+All configuration is read from environment variables. Prefix: `OS_GDRIVE_`.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GOG_ACCOUNT` | ✅ | — | Google account email (used by `gog --account`) |
+| `OS_GDRIVE_DB_PATH` | ❌ | `~/.gdrive/index.db` | Path to the SQLite database file |
+| `OS_GDRIVE_LOG_PATH` | ❌ | `~/.gdrive/gdrive.log` | Path to the log file |
+| `OS_GDRIVE_GOG_BIN` | ❌ | `gog` | Full path to the `gog` binary if not in PATH |
+| `OS_GDRIVE_DRY_RUN` | ❌ | `0` | Set to `1`/`true`/`yes` to enable dry-run mode globally |
+
+---
+
+## Architecture
+
+```
+CLI (cli.py)
+  │
+  ├── reindex.py ──► gog.py (drive_search_all) ──► gog CLI subprocess ──► Google Drive API
+  │       └──────────────────────────────────────────────────────────────► db.py (upsert_file)
+  │
+  ├── search.py ───► db.py (search_files) ──► SQLite
+  │
+  └── brief.py ───► gog.py (drive_download) ──► tmp file
+              │──► text extractors (docx/pdf/xlsx/pptx)
+              └──► Gemini CLI subprocess ──► db.py (save_brief)
+```
+
+### SQLite Schema
+
+**`files`** — metadata for all indexed Drive files:
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | TEXT PK | Google Drive file ID |
+| `name` | TEXT | File name |
+| `mime_type` | TEXT | MIME type |
+| `size_bytes` | INTEGER | File size in bytes |
+| `owner` | TEXT | Owner's email address |
+| `modified_at` | TEXT | ISO timestamp of last modification |
+| `parent_id` | TEXT | Parent folder ID |
+| `web_view_link` | TEXT | Google Drive URL |
+| `is_trashed` | INTEGER | 0 = active, 1 = in trash |
+| `indexed_at` | TEXT | Timestamp when the record was last indexed |
+
+**`index_runs`** — log of each reindex session:
+
+| Column | Description |
+|---|---|
+| `id` | Auto-increment run ID |
+| `started_at` / `finished_at` | Session timestamps |
+| `files_added` / `files_updated` | Change statistics |
+| `status` | `running` / `ok` / `error` |
+| `error_msg` | Error detail if the run failed |
+
+**`briefs`** — AI-generated summaries per file:
+
+| Column | Description |
+|---|---|
+| `file_id` | Foreign key to `files.id` |
+| `brief` | The generated summary text (NULL if failed) |
+| `error` | Error message if briefing failed |
+| `briefed_at` | ISO timestamp of the last brief attempt |
+
+---
+
+## Behavior Rules
+
+1. **Never delete files** — only upsert/update operations are allowed on the `files` table.
+2. **Always respect `dry_run`** — check `config.is_dry_run()` or the `--dry-run` flag before writing to the DB or Drive.
+3. **Automatic pagination** — `gog.drive_search_all()` handles all pages automatically; never query page-by-page manually.
+4. **Brief only files that need it** — `db.get_unbriefed_files()` filters out files that already have an up-to-date brief.
+5. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
+6. **Always clean up tmp files** — `brief.py` uses a `finally` block to ensure downloaded tmp files are always deleted.
+7. **Log to file AND stdout** — all log output is written to both `OS_GDRIVE_LOG_PATH` and stdout simultaneously.
+
+---
+
+## Error Handling
+
+| Scenario | Behavior |
+|---|---|
+| `gog` binary not found | Raises `RuntimeError` with install instructions |
+| `GOG_ACCOUNT` not set | Raises `RuntimeError` with an example export command |
+| `gog` exits with non-zero code | Raises `RuntimeError` with full stderr output |
+| Text extraction fails | `brief.py` records the error to the DB (`save_brief(error=...)`) and continues to the next file |
+| File has no extractable text | Logs a warning and skips briefing for that file |
+| Gemini CLI error | Raises `RuntimeError` from the subprocess, recorded to the DB |
+| `NotImplementedError` | Logged as a warning, recorded to the DB, continues to the next file |
+
+---
+
+## Example
+
+### Setup
+
+```bash
+export GOG_ACCOUNT="you@gmail.com"
+export OS_GDRIVE_DB_PATH="~/.gdrive/index.db"
+# Optional:
+export OS_GDRIVE_GOG_BIN="/usr/local/bin/gog"
+export OS_GDRIVE_DRY_RUN="0"
+```
+
+### Daily Workflow
+
+```bash
+# 1. Sync the index from Drive (run once or via cron)
+uv run python -m gdrive.cli reindex
+
+# 2. Search files offline
+uv run python -m gdrive.cli search --name "proposal" --mime pdf
+
+# 3. Generate AI briefs for new/updated documents
+uv run python -m gdrive.cli brief --limit 20
+```
+
+### Search Output Example
+
+```
+Name                          Type    Size      Owner            Modified    Link
+----------------------------  ------  --------  ---------------  ----------  --------
+Project Proposal 2025.pdf     pdf     1,234 KB  me@gmail.com     2025-01-15  https://...
+Q1 Budget.xlsx                xlsx      512 KB  me@gmail.com     2025-01-10  https://...
+
+2 result(s).
+```
+
+---
+
+## Roadmap / TODO
+
+- [x] Implement `gog drive download` in `gog.py`
+- [x] Implement Gemini CLI wrapper in `brief.py`
+- [x] Add `briefs` table to SQLite schema in `db.py` (`save_brief`, `get_unbriefed_files`, `get_last_brief_run`)
+- [x] Add `brief` subcommand to `cli.py`
+- [x] Add `upload` subcommand to the full workflow
+
+---
+
+*kilip/obsidian-skills · gdrive skill · reusable Google Drive automation*

@@ -1,0 +1,20 @@
+[project]
+name = "gdrive"
+version = "0.1.0"
+description = "Google Drive CLI tool backed by gog"
+requires-python = ">=3.8"
+dependencies = [
+    "tabulate>=0.9.0",
+    "gemini-cli",
+]
+
+[project.scripts]
+gdrive = "gdrive.cli:main"
+
+[tool.uv.sources]
+gemini-cli = { path = "../../../gemini-cli" }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+

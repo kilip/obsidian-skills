@@ -22,7 +22,7 @@ allowed-tools:
 
 - `gog` — Google OAuth CLI tool for Gmail access
 - `gemini` — Gemini CLI tool for generating briefs
-- `OV_INBOX_PATH` — path to your Obsidian Inbox (e.g., `path/to/vault/00 - Inbox`)
+- `OS_INBOX_PATH` — path to your Obsidian Inbox (e.g., `path/to/vault/00 - Inbox`)
 
 ## Usage
 
@@ -31,25 +31,25 @@ Use this skill when you need to pull fresh unread emails from Gmail into your Ob
 
 ```bash
 cd skills/email-reader
-export OV_INBOX_PATH="/path/to/obsidian/inbox"
+export OS_INBOX_PATH="/path/to/obsidian/inbox"
 uv run email_reader.py
 ```
 
 ### Input
 - Gmail accounts authenticated via `gog auth`
-- `OV_INBOX_PATH` environment variable
+- `OS_INBOX_PATH` environment variable
 
 ### Output
-- Markdown files in `OV_INBOX_PATH/Emails/`
-- Updated `OV_INBOX_PATH/Unsubscribe.md` for promotional emails
+- Markdown files in `OS_INBOX_PATH/Emails/`
+- Updated `OS_INBOX_PATH/Unsubscribe.md` for promotional emails
 
 ## Configuration
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `OV_INBOX_PATH` | ✅ | — | Absolute path to the Obsidian Inbox folder |
-| `GOG_BIN` | ❌ | `gog` | Path to `gog` binary |
-| `GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model for generating email briefs |
+| `OS_INBOX_PATH` | ✅ | — | Absolute path to the Obsidian Inbox folder |
+| `OS_GOG_BIN` | ❌ | `gog` | Path to `gog` binary |
+| `OS_GEMINI_MODEL` | ❌ | `gemini-2.5-flash-lite` | Gemini model for generating email briefs |
 
 ## Behavior Rules
 - Fetch emails from **all** authenticated accounts, not just one.
@@ -66,7 +66,7 @@ uv run email_reader.py
 
 ## Example
 ```bash
-export OV_INBOX_PATH="D:/Vault/00 - Inbox"
+export OS_INBOX_PATH="D:/Vault/00 - Inbox"
 uv run email_reader.py
 ```
 
