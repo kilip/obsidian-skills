@@ -82,25 +82,30 @@ def drive_search_page(
     """Run `gog drive search` for one page, return parsed JSON dict."""
     args = ["drive", "search", query, "--json"]
     if page_token:
-        args += ["--page-token", page_token]
+        args += ["--page", page_token]
     result = _run(args)
     return json.loads(result.stdout)
 
 
-def drive_search_all(query: str) -> Iterator[Dict[str, Any]]:
-    """Paginate through all results for a search query, yielding each file dict."""
-    page_token: Optional[str] = None
+def drive_search_all(
+    query: str, resume_token: Optional[str] = None
+) -> Iterator[tuple[Dict[str, Any], Optional[str]]]:
+    """Paginate through all results for a search query, yielding (file_dict, next_page_token)."""
+    page_token: Optional[str] = resume_token
     page_num = 0
     while True:
         page_num += 1
         logger.debug("Fetching page %d (token=%s)", page_num, page_token)
         data = drive_search_page(query, page_token)
         files = data.get("files", [])
+        next_page_token = data.get("nextPageToken")
+
         for f in files:
-            yield f
-        page_token = data.get("nextPageToken")
-        if not page_token:
+            yield f, next_page_token
+
+        if not next_page_token:
             break
+        page_token = next_page_token
         time.sleep(config.get_page_delay())  # pause between pages
 
 

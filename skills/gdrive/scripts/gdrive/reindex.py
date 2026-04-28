@@ -25,21 +25,30 @@ def run(
     since = db.get_last_successful_run(conn) if incremental else None
     query = _QUERY_INCREMENTAL.format(since=since) if since else _QUERY_FULL
 
-    run_id = db.start_run(conn) if not dry_run else -1
+    run_id = db.start_run(conn, query=query) if not dry_run else -1
     added = updated = deleted = 0
 
+    # Resume logic
+    resume_token = None
+    resumable = db.get_resumable_run(conn, query)
+    if resumable:
+        resume_token = resumable["last_page_token"]
+        logger.info("Resuming from previous failed run (ID %d, token=%s)", resumable["id"], resume_token)
+
     logger.info(
-        "Starting reindex (mode=%s, dry_run=%s, limit=%s) ...",
+        "Starting reindex (mode=%s, dry_run=%s, limit=%s, resume=%s) ...",
         "incremental" if since else "full",
         dry_run,
         limit,
+        bool(resume_token),
     )
     if since:
         logger.info("Fetching files modified since %s", since)
 
     try:
         count = 0
-        for f in gog.drive_search_all(query):
+        current_token = resume_token
+        for f, next_token in gog.drive_search_all(query, resume_token=resume_token):
             if limit and count >= limit:
                 logger.info("Limit reached (%d), stopping.", limit)
                 break
@@ -51,6 +60,12 @@ def run(
                     added += 1
                 else:
                     updated += 1
+                
+                # Update progress in DB
+                if next_token != current_token:
+                    db.save_page_token(conn, run_id, next_token)
+                    current_token = next_token
+
                 if (added + updated) % 100 == 0:
                     conn.commit()
                     logger.info("  ... %d added, %d updated so far", added, updated)
@@ -93,7 +108,7 @@ def _mark_trashed(conn, dry_run: bool) -> int:
     """Find trashed files in Drive and mark them in DB."""
     count = 0
     logger.info("Checking for trashed files in Drive...")
-    for f in gog.drive_search_all(_QUERY_TRASHED):
+    for f, _ in gog.drive_search_all(_QUERY_TRASHED):
         file_id = f["id"]
         # Only update if it exists in our DB and is not already marked trashed
         existing = conn.execute(

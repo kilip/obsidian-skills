@@ -30,6 +30,8 @@ CREATE TABLE IF NOT EXISTS index_runs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     started_at      TEXT NOT NULL,
     finished_at     TEXT,
+    query           TEXT,
+    last_page_token TEXT,
     files_scanned   INTEGER DEFAULT 0,
     files_added     INTEGER DEFAULT 0,
     files_updated   INTEGER DEFAULT 0,
@@ -52,8 +54,24 @@ def connect(db_path: str) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(DDL)
+    _migrate(conn)
     conn.commit()
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Add missing columns to existing tables."""
+    # Add 'query' and 'last_page_token' to index_runs if they don't exist
+    cursor = conn.execute("PRAGMA table_info(index_runs)")
+    columns = [row["name"] for row in cursor.fetchall()]
+    
+    if "query" not in columns:
+        logger.info("Migrating DB: adding 'query' column to index_runs")
+        conn.execute("ALTER TABLE index_runs ADD COLUMN query TEXT")
+    
+    if "last_page_token" not in columns:
+        logger.info("Migrating DB: adding 'last_page_token' column to index_runs")
+        conn.execute("ALTER TABLE index_runs ADD COLUMN last_page_token TEXT")
 
 
 def _now() -> str:
@@ -117,13 +135,42 @@ def mark_as_trashed(conn: sqlite3.Connection, file_id: str) -> None:
     )
 
 
-def start_run(conn: sqlite3.Connection) -> int:
+def start_run(conn: sqlite3.Connection, query: Optional[str] = None) -> int:
     cur = conn.execute(
-        "INSERT INTO index_runs (started_at, status) VALUES (?, 'running')",
-        (_now(),),
+        "INSERT INTO index_runs (started_at, query, status) VALUES (?, ?, 'running')",
+        (_now(), query),
     )
     conn.commit()
     return cur.lastrowid
+
+
+def save_page_token(conn: sqlite3.Connection, run_id: int, token: Optional[str]) -> None:
+    """Save the nextPageToken to allow resuming later."""
+    conn.execute(
+        "UPDATE index_runs SET last_page_token = ? WHERE id = ?",
+        (token, run_id),
+    )
+    conn.commit()
+
+
+def get_resume_token(conn: sqlite3.Connection, run_id: int) -> Optional[str]:
+    """Get the last saved page token for a specific run."""
+    row = conn.execute(
+        "SELECT last_page_token FROM index_runs WHERE id = ?", (run_id,)
+    ).fetchone()
+    return row["last_page_token"] if row else None
+
+
+def get_resumable_run(conn: sqlite3.Connection, query: str) -> Optional[sqlite3.Row]:
+    """Find the most recent failed run with the same query that has a page token."""
+    return conn.execute(
+        """
+        SELECT * FROM index_runs 
+        WHERE query = ? AND status = 'error' AND last_page_token IS NOT NULL
+        ORDER BY started_at DESC LIMIT 1
+        """,
+        (query,),
+    ).fetchone()
 
 
 def finish_run(
