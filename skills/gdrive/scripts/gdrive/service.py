@@ -81,6 +81,10 @@ def install() -> None:
 
     scripts_dir = Path(__file__).parent.parent.absolute()
 
+    # 0. Sync dependencies
+    print("Syncing dependencies via uv...")
+    subprocess.run([_get_bin_path("uv"), "sync"], cwd=scripts_dir, check=True)
+
     # 1. Generate env file
     _generate_env_file(env_file)
     print(f"Generated environment file: {env_file}")
