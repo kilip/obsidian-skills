@@ -19,6 +19,9 @@ _GOG_SEARCH_LOCATIONS = [
     os.path.expanduser("~/.local/bin/gog"),
 ]
 
+MAX_RETRIES = 3
+
+
 
 def _find_gog() -> str:
     bin_name = config.get_gog_bin()
@@ -42,19 +45,35 @@ def _run(args: List[str], capture: bool = True) -> subprocess.CompletedProcess:
     account = config.get_account()
     cmd = [gog, "--account", account, "--no-input"] + args
     logger.debug("Running: %s", " ".join(cmd))
-    result = subprocess.run(
-        cmd,
-        capture_output=capture,
-        text=True,
-    )
-    if result.returncode != 0:
+
+    for attempt in range(MAX_RETRIES):
+        result = subprocess.run(
+            cmd,
+            capture_output=capture,
+            text=True,
+        )
+        if result.returncode == 0:
+            return result
+
         stderr = result.stderr.strip() if result.stderr else "(no stderr)"
+        if "429" in stderr or "rateLimitExceeded" in stderr:
+            delay = 2**attempt  # 1s, 2s, 4s
+            logger.warning(
+                "Rate limited. Retrying in %ds (attempt %d/%d)...",
+                delay,
+                attempt + 1,
+                MAX_RETRIES,
+            )
+            time.sleep(delay)
+            continue
+
         raise RuntimeError(
             f"gog exited with code {result.returncode}.\n"
             f"Command: {' '.join(cmd)}\n"
             f"Stderr: {stderr}"
         )
-    return result
+
+    raise RuntimeError("Max retries exceeded due to rate limiting.")
 
 
 def drive_search_page(
@@ -82,7 +101,7 @@ def drive_search_all(query: str) -> Iterator[Dict[str, Any]]:
         page_token = data.get("nextPageToken")
         if not page_token:
             break
-        time.sleep(0.1)  # small pause between pages
+        time.sleep(config.get_page_delay())  # pause between pages
 
 
 def drive_download(file_id: str, output_path: str) -> None:

@@ -48,3 +48,7 @@ def get_gemini_model() -> str:
 def get_gemini_bin() -> str:
     return os.environ.get("OS_GEMINI_BIN", "gemini").strip()
 
+
+def get_page_delay() -> float:
+    return float(os.environ.get("OS_GDRIVE_PAGE_DELAY", "0.1"))
+
