@@ -55,7 +55,7 @@ def _print_files_table(rows) -> None:
 def cmd_reindex(args) -> int:
     dry_run = args.dry_run or config.is_dry_run()
     conn = db.connect(config.get_db_path())
-    reindex.run(conn, dry_run=dry_run)
+    reindex.run(conn, dry_run=dry_run, limit=args.limit)
     return 0
 
 
@@ -125,6 +125,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_reindex.add_argument(
         "--dry-run", action="store_true",
         help="Simulate without writing to DB"
+    )
+    p_reindex.add_argument(
+        "--limit", "-l", type=int,
+        help="Max number of files to index"
     )
     p_reindex.set_defaults(func=cmd_reindex)
 

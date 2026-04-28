@@ -11,17 +11,22 @@ logger = logging.getLogger(__name__)
 _QUERY = "trashed = false"
 
 
-def run(conn, dry_run: Optional[bool] = None) -> None:
+def run(conn, dry_run: Optional[bool] = None, limit: Optional[int] = None) -> None:
     if dry_run is None:
         dry_run = config.is_dry_run()
 
     run_id = db.start_run(conn) if not dry_run else -1
     added = updated = 0
 
-    logger.info("Starting reindex (dry_run=%s) ...", dry_run)
+    logger.info("Starting reindex (dry_run=%s, limit=%s) ...", dry_run, limit)
 
     try:
+        count = 0
         for f in gog.drive_search_all(_QUERY):
+            if limit and count >= limit:
+                logger.info("Limit reached (%d), stopping.", limit)
+                break
+
             action = "DRY-RUN"
             if not dry_run:
                 action = db.upsert_file(conn, f)
@@ -34,6 +39,8 @@ def run(conn, dry_run: Optional[bool] = None) -> None:
                     logger.info("  ... %d added, %d updated so far", added, updated)
             else:
                 logger.info("[dry-run] would upsert: %s (%s)", f.get("name"), f.get("id"))
+            
+            count += 1
 
         if not dry_run:
             conn.commit()

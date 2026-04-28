@@ -1,2 +1,6 @@
-sandbox/inbox
+sandbox/
 .env
+.venv/
+__pycache__/
+*.db
+*.log
