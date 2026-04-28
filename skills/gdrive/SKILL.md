@@ -118,6 +118,26 @@ uv run python -m gdrive.cli brief --dry-run    # preview without downloading or 
 | `--limit` | `-l` | 50 | Maximum number of files to brief per run |
 | `--dry-run` | — | false | Simulate without downloading files or calling Gemini |
 
+#### 4. `service install` — Setup automatic indexing
+
+Automates the installation of a systemd user service and timer to run `reindex` every 12 hours.
+
+```bash
+uv run python -m gdrive.cli service install
+```
+
+This command:
+- Validates prerequisites (`uv`, `gog`, `GOG_ACCOUNT`).
+- Generates `~/.config/systemd/user/gdrive.service` and `gdrive.timer`.
+- Generates `~/.config/gdrive/env` with your current environment variables.
+- Enables and starts the timer.
+
+Verify the service:
+```bash
+systemctl --user status gdrive.timer
+systemctl --user list-timers | grep gdrive
+```
+
 ---
 
 ## Configuration

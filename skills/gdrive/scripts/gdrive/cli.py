@@ -6,7 +6,7 @@ import logging
 import sys
 from typing import List
 
-from gdrive import brief, config, db, reindex, search, upload
+from gdrive import brief, config, db, reindex, search, service, upload
 
 
 def _setup_logging() -> None:
@@ -139,6 +139,11 @@ def cmd_brief(args) -> int:
     return 0
 
 
+def cmd_service_install(args) -> int:
+    service.install()
+    return 0
+
+
 # ── Argument parser ────────────────────────────────────────────────────────────
 
 def build_parser() -> argparse.ArgumentParser:
@@ -220,6 +225,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Simulate without downloading or calling Gemini"
     )
     p_brief.set_defaults(func=cmd_brief)
+
+    # service
+    p_service = sub.add_parser("service", help="Manage systemd service")
+    ps_service = p_service.add_subparsers(dest="subcommand", required=True)
+    p_service_install = ps_service.add_parser("install", help="Install systemd user service + timer")
+    p_service_install.set_defaults(func=cmd_service_install)
 
     return parser
 
