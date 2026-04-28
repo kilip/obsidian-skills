@@ -109,6 +109,14 @@ def upsert_file(conn: sqlite3.Connection, f: Dict[str, Any]) -> str:
     return "added" if existing is None else "updated"
 
 
+def mark_as_trashed(conn: sqlite3.Connection, file_id: str) -> None:
+    """Mark a file as trashed in the database."""
+    conn.execute(
+        "UPDATE files SET is_trashed = 1, indexed_at = ? WHERE id = ?",
+        (_now(), file_id),
+    )
+
+
 def start_run(conn: sqlite3.Connection) -> int:
     cur = conn.execute(
         "INSERT INTO index_runs (started_at, status) VALUES (?, 'running')",

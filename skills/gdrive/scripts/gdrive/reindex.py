@@ -10,6 +10,7 @@ logger = logging.getLogger(__name__)
 # Drive API query that returns all non-trashed files in My Drive
 _QUERY_FULL = "trashed = false"
 _QUERY_INCREMENTAL = "trashed = false and modifiedTime > '{since}'"
+_QUERY_TRASHED = "trashed = true"
 
 
 def run(
@@ -25,7 +26,7 @@ def run(
     query = _QUERY_INCREMENTAL.format(since=since) if since else _QUERY_FULL
 
     run_id = db.start_run(conn) if not dry_run else -1
-    added = updated = 0
+    added = updated = deleted = 0
 
     logger.info(
         "Starting reindex (mode=%s, dry_run=%s, limit=%s) ...",
@@ -58,11 +59,22 @@ def run(
             
             count += 1
 
+        deleted = _mark_trashed(conn, dry_run)
+
         if not dry_run:
             conn.commit()
-            db.finish_run(conn, run_id, scanned=count, added=added, updated=updated, deleted=0, status="ok")
+            db.finish_run(
+                conn,
+                run_id,
+                scanned=count,
+                added=added,
+                updated=updated,
+                deleted=deleted,
+                status="ok",
+            )
             logger.info(
-                "Reindex complete: %d scanned, %d added, %d updated.", count, added, updated
+                "Reindex complete: %d scanned, %d added, %d updated, %d trashed.",
+                count, added, updated, deleted
             )
         else:
             logger.info("Dry-run complete — no writes performed.")
@@ -71,7 +83,34 @@ def run(
         logger.error("Reindex failed: %s", exc)
         if not dry_run and run_id != -1:
             db.finish_run(
-                conn, run_id, scanned=count, added=added, updated=updated, deleted=0,
+                conn, run_id, scanned=count, added=added, updated=updated, deleted=deleted,
                 status="error", error_msg=str(exc)
             )
         raise
+
+
+def _mark_trashed(conn, dry_run: bool) -> int:
+    """Find trashed files in Drive and mark them in DB."""
+    count = 0
+    logger.info("Checking for trashed files in Drive...")
+    for f in gog.drive_search_all(_QUERY_TRASHED):
+        file_id = f["id"]
+        # Only update if it exists in our DB and is not already marked trashed
+        existing = conn.execute(
+            "SELECT id FROM files WHERE id = ? AND is_trashed = 0", (file_id,)
+        ).fetchone()
+
+        if existing:
+            if not dry_run:
+                db.mark_as_trashed(conn, file_id)
+                count += 1
+            else:
+                logger.debug("[dry-run] would mark trashed: %s (%s)", f.get("name"), file_id)
+                count += 1
+
+    if not dry_run and count > 0:
+        conn.commit()
+    
+    if count > 0:
+        logger.info("Detected %d trashed files.", count)
+    return count
