@@ -12,6 +12,7 @@ Flow per file:
 import logging
 import os
 import tempfile
+import time
 from typing import Optional
 
 from gdrive import config, db, extractor as extractors, gemini, gog
@@ -23,19 +24,19 @@ MAX_TEXT_CHARS = 12_000
 
 # MIME → file extension mapping for tmp file naming
 _MIME_EXT = {
-    "application/vnd.openxmlformats-officedocument.wordprocessingml": ".docx",
+    "wordprocessingml": ".docx",
     "application/msword": ".doc",
-    "application/pdf": ".pdf",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml": ".xlsx",
-    "application/vnd.ms-excel": ".xls",
-    "application/vnd.openxmlformats-officedocument.presentationml": ".pptx",
-    "application/vnd.ms-powerpoint": ".ppt",
+    "pdf": ".pdf",
+    "spreadsheetml": ".xlsx",
+    "ms-excel": ".xls",
+    "presentationml": ".pptx",
+    "ms-powerpoint": ".ppt",
 }
 
 
 def _get_ext(mime_type: str) -> str:
-    for prefix, ext in _MIME_EXT.items():
-        if mime_type.startswith(prefix):
+    for key, ext in _MIME_EXT.items():
+        if key in mime_type:
             return ext
     return ".bin"
 
@@ -78,6 +79,26 @@ Document content:
     return gemini.prompt(prompt)
 
 
+def _call_gemini_with_retry(
+    file_name: str, mime_type: str, text: str, max_retries: int = 3
+) -> str:
+    """Call Gemini with simple exponential backoff retry logic."""
+    last_err = None
+    for attempt in range(max_retries):
+        try:
+            return _call_gemini(file_name, mime_type, text)
+        except Exception as e:
+            last_err = e
+            wait = 2 ** (attempt + 1)
+            logger.warning(
+                "  Gemini attempt %d failed: %s. Retrying in %ds...",
+                attempt + 1, e, wait
+            )
+            time.sleep(wait)
+    
+    raise last_err or RuntimeError("Gemini call failed after retries")
+
+
 # ── Download helper ────────────────────────────────────────────────────────────
 
 def _download_file(file_id: str, dest_path: str) -> None:
@@ -99,11 +120,9 @@ def _brief_one(conn, row, dry_run: bool) -> bool:
 
     tmp_path = None
     try:
-        # 1. Reserve a tmp file path
-        with tempfile.NamedTemporaryFile(
-            suffix=ext, delete=False, prefix="gdrive_brief_"
-        ) as tf:
-            tmp_path = tf.name
+        # 1. Reserve a tmp file path (using mkstemp to avoid pre-creating the file content)
+        fd, tmp_path = tempfile.mkstemp(suffix=ext, prefix="gdrive_brief_")
+        os.close(fd)
 
         if dry_run:
             logger.info("[dry-run] would download + brief: %s", name)
@@ -124,7 +143,7 @@ def _brief_one(conn, row, dry_run: bool) -> bool:
             text = text[:MAX_TEXT_CHARS] + "\n\n[... text truncated ...]"
 
         # 5. Call Gemini
-        brief = _call_gemini(name, mime, text)
+        brief = _call_gemini_with_retry(name, mime, text)
 
         # 6. Save to DB
         db.save_brief(conn, file_id, brief=brief)
@@ -169,7 +188,12 @@ def run(conn, dry_run: Optional[bool] = None, limit: int = 50) -> None:
 
     logger.info("%sFound %d file(s) to brief.", prefix, len(rows))
     ok = fail = 0
-    for row in rows:
+    delay = config.get_brief_delay()
+
+    for i, row in enumerate(rows):
+        if i > 0 and delay > 0:
+            time.sleep(delay)
+
         success = _brief_one(conn, row, dry_run)
         if success:
             ok += 1

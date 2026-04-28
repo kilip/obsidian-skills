@@ -131,6 +131,8 @@ All configuration is read from environment variables. Prefix: `OS_GDRIVE_`.
 | `OS_GDRIVE_LOG_PATH` | ❌ | `~/.gdrive/gdrive.log` | Path to the log file |
 | `OS_GDRIVE_GOG_BIN` | ❌ | `gog` | Full path to the `gog` binary if not in PATH |
 | `OS_GDRIVE_DRY_RUN` | ❌ | `0` | Set to `1`/`true`/`yes` to enable dry-run mode globally |
+| `OS_GDRIVE_PAGE_DELAY` | ❌ | `0.1` | Delay in seconds between reindex pages |
+| `OS_GDRIVE_BRIEF_DELAY` | ❌ | `0.5` | Delay in seconds between file briefing |
 
 ---
 
@@ -207,8 +209,10 @@ CLI (cli.py)
 2. **Always respect `dry_run`** — check `config.is_dry_run()` or the `--dry-run` flag before writing to the DB or Drive.
 3. **Automatic pagination** — `gog.drive_search_all()` handles all pages automatically; never query page-by-page manually.
 4. **Brief only files that need it** — `db.get_unbriefed_files()` filters out files that already have an up-to-date brief.
-5. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
-6. **Always clean up tmp files** — `brief.py` uses a `finally` block to ensure downloaded tmp files are always deleted.
+5. **Robust since advancing** — `since` always advances after a brief run, even if all files in that run failed, to prevent infinite loops.
+6. **Automatic retries** — AI briefing calls automatically retry up to 3 times with exponential backoff on failure.
+7. **Text truncation** — `brief.py` truncates extracted text to `MAX_TEXT_CHARS = 12_000` before sending to Gemini to avoid token overload.
+8. **Always clean up tmp files** — `brief.py` ensures downloaded tmp files are always deleted.
 7. **Log to file AND stdout** — all log output is written to both `OS_GDRIVE_LOG_PATH` and stdout simultaneously.
 
 ---

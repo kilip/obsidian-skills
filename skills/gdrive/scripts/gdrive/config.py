@@ -52,3 +52,7 @@ def get_gemini_bin() -> str:
 def get_page_delay() -> float:
     return float(os.environ.get("OS_GDRIVE_PAGE_DELAY", "0.1"))
 
+
+def get_brief_delay() -> float:
+    return float(os.environ.get("OS_GDRIVE_BRIEF_DELAY", "0.5"))
+

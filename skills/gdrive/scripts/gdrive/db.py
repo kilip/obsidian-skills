@@ -368,9 +368,9 @@ def get_unbriefed_files(
 
 
 def get_last_brief_run(conn: sqlite3.Connection) -> Optional[str]:
-    """Return the ISO timestamp of the most recent successful brief, or None."""
+    """Return the ISO timestamp of the most recent brief attempt, or None."""
     row = conn.execute(
-        "SELECT MAX(briefed_at) AS last FROM briefs WHERE brief IS NOT NULL"
+        "SELECT MAX(briefed_at) AS last FROM briefs"
     ).fetchone()
     return row["last"] if row else None
 
