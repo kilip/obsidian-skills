@@ -62,6 +62,9 @@ def cmd_reindex(args) -> int:
 def cmd_search(args) -> int:
     conn = db.connect(config.get_db_path())
     
+    if db.is_index_empty(conn):
+        print("[warn] Index is empty. Run 'gdrive reindex' first.", file=sys.stderr)
+
     has_brief = None
     if args.has_brief:
         has_brief = True
@@ -87,11 +90,21 @@ def cmd_search(args) -> int:
     if not rows:
         print("No results found.")
         return 0
-    if args.json:
-        print(json.dumps([dict(r) for r in rows], ensure_ascii=False, indent=2))
+
+    # Enrich results with agent-friendly metadata
+    results = []
+    for r in rows:
+        d = dict(r)
+        d["has_brief"] = bool(d.get("brief"))
+        d["brief_preview"] = (d["brief"][:200] + "...") if d.get("brief") and len(d["brief"]) > 200 else d.get("brief")
+        results.append(d)
+
+    if args.table:
+        _print_files_table(results)
+        print(f"\n{len(results)} result(s).")
     else:
-        _print_files_table(rows)
-    print(f"\n{len(rows)} result(s).")
+        # Default to JSON
+        print(json.dumps(results, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -161,7 +174,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--owner", "-o", help="Filter by owner email (substring)")
     p_search.add_argument("--parent", "-p", help="Filter by parent folder ID")
     p_search.add_argument("--limit", "-l", type=int, default=10, help="Max results (default: 10)")
-    p_search.add_argument("--json", "-j", action="store_true", help="Output as JSON")
+    p_search.add_argument("--json", "-j", action="store_true", help="Output as JSON (default)")
+    p_search.add_argument("--table", "-t", action="store_true", help="Output as human-readable table")
     p_search.add_argument(
         "--sort-by", choices=["modified", "size", "name"], default="modified",
         help="Sort results (default: modified)"

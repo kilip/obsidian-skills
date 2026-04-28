@@ -381,3 +381,9 @@ def get_last_successful_run(conn: sqlite3.Connection) -> Optional[str]:
         "SELECT finished_at FROM index_runs WHERE status = 'ok' ORDER BY finished_at DESC LIMIT 1"
     ).fetchone()
     return row["finished_at"] if row else None
+
+
+def is_index_empty(conn: sqlite3.Connection) -> bool:
+    """Check if the files table is empty."""
+    row = conn.execute("SELECT COUNT(*) as count FROM files").fetchone()
+    return row["count"] == 0
