@@ -35,22 +35,23 @@ def run(
         resume_token = resumable["last_page_token"]
         logger.info("Resuming from previous failed run (ID %d, token=%s)", resumable["id"], resume_token)
 
+    prefix = "[dry-run] " if dry_run else ""
     logger.info(
-        "Starting reindex (mode=%s, dry_run=%s, limit=%s, resume=%s) ...",
+        "%sStarting reindex (mode=%s, limit=%s, resume=%s) ...",
+        prefix,
         "incremental" if since else "full",
-        dry_run,
         limit,
         bool(resume_token),
     )
     if since:
-        logger.info("Fetching files modified since %s", since)
+        logger.info("%sFetching files modified since %s", prefix, since)
 
     try:
         count = 0
         current_token = resume_token
         for f, next_token in gog.drive_search_all(query, resume_token=resume_token):
             if limit and count >= limit:
-                logger.info("Limit reached (%d), stopping.", limit)
+                logger.info("%sLimit reached (%d), stopping.", prefix, limit)
                 break
 
             action = "DRY-RUN"
@@ -92,7 +93,7 @@ def run(
                 count, added, updated, deleted
             )
         else:
-            logger.info("Dry-run complete — no writes performed.")
+            logger.info("[dry-run] complete — no writes performed.")
 
     except Exception as exc:
         logger.error("Reindex failed: %s", exc)
@@ -107,7 +108,8 @@ def run(
 def _mark_trashed(conn, dry_run: bool) -> int:
     """Find trashed files in Drive and mark them in DB."""
     count = 0
-    logger.info("Checking for trashed files in Drive...")
+    prefix = "[dry-run] " if dry_run else ""
+    logger.info("%sChecking for trashed files in Drive...", prefix)
     for f, _ in gog.drive_search_all(_QUERY_TRASHED):
         file_id = f["id"]
         # Only update if it exists in our DB and is not already marked trashed
@@ -120,12 +122,13 @@ def _mark_trashed(conn, dry_run: bool) -> int:
                 db.mark_as_trashed(conn, file_id)
                 count += 1
             else:
-                logger.debug("[dry-run] would mark trashed: %s (%s)", f.get("name"), file_id)
+                logger.info("[dry-run] would mark trashed: %s (%s)", f.get("name"), file_id)
                 count += 1
 
     if not dry_run and count > 0:
         conn.commit()
     
     if count > 0:
-        logger.info("Detected %d trashed files.", count)
+        prefix = "[dry-run] " if dry_run else ""
+        logger.info("%sDetected %d trashed files.", prefix, count)
     return count

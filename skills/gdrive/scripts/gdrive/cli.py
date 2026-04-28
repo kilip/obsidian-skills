@@ -61,12 +61,25 @@ def cmd_reindex(args) -> int:
 
 def cmd_search(args) -> int:
     conn = db.connect(config.get_db_path())
+    
+    has_brief = None
+    if args.has_brief:
+        has_brief = True
+    elif args.no_brief:
+        has_brief = False
+
     rows = search.run(
         conn,
         name=args.name,
         mime=args.mime,
         owner=args.owner,
         parent_id=args.parent,
+        after=args.after,
+        before=args.before,
+        include_trashed=args.include_trashed,
+        trashed_only=args.trashed_only,
+        has_brief=has_brief,
+        brief_contains=args.brief_contains,
         limit=args.limit,
     )
     if not rows:
@@ -147,6 +160,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_search.add_argument("--parent", "-p", help="Filter by parent folder ID")
     p_search.add_argument("--limit", "-l", type=int, default=50, help="Max results (default: 50)")
     p_search.add_argument("--json", "-j", action="store_true", help="Output as JSON")
+    
+    # Date filters
+    p_search.add_argument("--after", help="Modified after date (ISO or relative e.g. 7d)")
+    p_search.add_argument("--before", help="Modified before date (ISO or relative)")
+    
+    # Trashed filters (mutually exclusive)
+    gt_trashed = p_search.add_mutually_exclusive_group()
+    gt_trashed.add_argument("--include-trashed", action="store_true", help="Include trashed files")
+    gt_trashed.add_argument("--trashed-only", action="store_true", help="Only show trashed files")
+    
+    # Brief filters
+    gt_brief = p_search.add_mutually_exclusive_group()
+    gt_brief.add_argument("--has-brief", action="store_true", help="Only show files with AI brief")
+    gt_brief.add_argument("--no-brief", action="store_true", help="Only show files without AI brief")
+    p_search.add_argument("--brief-contains", help="Filter by content of AI brief (substring)")
+
     p_search.set_defaults(func=cmd_search)
 
     # upload

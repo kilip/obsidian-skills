@@ -94,7 +94,8 @@ def _brief_one(conn, row, dry_run: bool) -> bool:
     mime = row["mime_type"] or ""
     ext = _get_ext(mime)
 
-    logger.info("Briefing: %s (%s)", name, file_id)
+    prefix = "[dry-run] " if dry_run else ""
+    logger.info("%sBriefing: %s (%s)", prefix, name, file_id)
 
     tmp_path = None
     try:
@@ -155,17 +156,18 @@ def run(conn, dry_run: Optional[bool] = None, limit: int = 50) -> None:
         dry_run = config.is_dry_run()
 
     since = db.get_last_brief_run(conn)
+    prefix = "[dry-run] " if dry_run else ""
     logger.info(
-        "Brief run started (since=%s, dry_run=%s, limit=%d)",
-        since or "beginning", dry_run, limit
+        "%sBrief run started (since=%s, limit=%d)",
+        prefix, since or "beginning", limit
     )
 
     rows = db.get_unbriefed_files(conn, since=since, limit=limit)
     if not rows:
-        logger.info("No new files to brief.")
+        logger.info("%sNo new files to brief.", prefix)
         return
 
-    logger.info("Found %d file(s) to brief.", len(rows))
+    logger.info("%sFound %d file(s) to brief.", prefix, len(rows))
     ok = fail = 0
     for row in rows:
         success = _brief_one(conn, row, dry_run)
@@ -174,4 +176,5 @@ def run(conn, dry_run: Optional[bool] = None, limit: int = 50) -> None:
         else:
             fail += 1
 
-    logger.info("Brief run complete: %d succeeded, %d failed.", ok, fail)
+    prefix = "[dry-run] " if dry_run else ""
+    logger.info("%sBrief run complete: %d succeeded, %d failed.", prefix, ok, fail)

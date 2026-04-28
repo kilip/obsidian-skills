@@ -201,30 +201,69 @@ def search_files(
     mime: Optional[str] = None,
     owner: Optional[str] = None,
     parent_id: Optional[str] = None,
+    after: Optional[str] = None,
+    before: Optional[str] = None,
+    include_trashed: bool = False,
+    trashed_only: bool = False,
+    has_brief: Optional[bool] = None,
+    brief_contains: Optional[str] = None,
     limit: int = 50,
 ) -> List[sqlite3.Row]:
-    clauses = ["is_trashed = 0"]
     params: List[Any] = []
+    
+    # Handle trashed logic
+    if trashed_only:
+        clauses = ["f.is_trashed = 1"]
+    elif include_trashed:
+        clauses = []
+    else:
+        clauses = ["f.is_trashed = 0"]
 
     if name:
-        clauses.append("name LIKE ?")
+        clauses.append("f.name LIKE ?")
         params.append(f"%{name}%")
     if mime:
-        clauses.append("mime_type LIKE ?")
+        clauses.append("f.mime_type LIKE ?")
         params.append(f"%{mime}%")
     if owner:
-        clauses.append("owner LIKE ?")
+        clauses.append("f.owner LIKE ?")
         params.append(f"%{owner}%")
     if parent_id:
-        clauses.append("parent_id = ?")
+        clauses.append("f.parent_id = ?")
         params.append(parent_id)
+    
+    # Date filters
+    if after:
+        clauses.append("f.modified_at >= ?")
+        params.append(after)
+    if before:
+        clauses.append("f.modified_at <= ?")
+        params.append(before)
 
-    where = " AND ".join(clauses)
+    # Brief filters
+    if has_brief is True:
+        clauses.append("b.brief IS NOT NULL")
+    elif has_brief is False:
+        clauses.append("b.brief IS NULL")
+    
+    if brief_contains:
+        clauses.append("b.brief LIKE ?")
+        params.append(f"%{brief_contains}%")
+
+    where = ""
+    if clauses:
+        where = "WHERE " + " AND ".join(clauses)
+
+    query = f"""
+        SELECT f.*, b.brief, b.briefed_at
+        FROM files f
+        LEFT JOIN briefs b ON b.file_id = f.id
+        {where}
+        ORDER BY f.modified_at DESC
+        LIMIT ?
+    """
     params.append(limit)
-    rows = conn.execute(
-        f"SELECT * FROM files WHERE {where} ORDER BY modified_at DESC LIMIT ?",
-        params,
-    ).fetchall()
+    rows = conn.execute(query, params).fetchall()
     return rows
 
 
