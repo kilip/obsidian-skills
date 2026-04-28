@@ -207,6 +207,8 @@ def search_files(
     trashed_only: bool = False,
     has_brief: Optional[bool] = None,
     brief_contains: Optional[str] = None,
+    sort_by: str = "modified",
+    fields: Optional[List[str]] = None,
     limit: int = 50,
 ) -> List[sqlite3.Row]:
     params: List[Any] = []
@@ -220,8 +222,12 @@ def search_files(
         clauses = ["f.is_trashed = 0"]
 
     if name:
-        clauses.append("f.name LIKE ?")
-        params.append(f"%{name}%")
+        # Tokenized fuzzy search (AND logic)
+        tokens = name.split()
+        for t in tokens:
+            clauses.append("f.name LIKE ?")
+            params.append(f"%{t}%")
+            
     if mime:
         clauses.append("f.mime_type LIKE ?")
         params.append(f"%{mime}%")
@@ -254,12 +260,37 @@ def search_files(
     if clauses:
         where = "WHERE " + " AND ".join(clauses)
 
+    # Ordering
+    sort_map = {
+        "modified": "f.modified_at DESC",
+        "size": "f.size_bytes DESC",
+        "name": "f.name ASC",
+    }
+    order_by = sort_map.get(sort_by, "f.modified_at DESC")
+
+    # Field selection
+    if fields:
+        allowed = {
+            "id", "name", "mime_type", "size_bytes", "owner", 
+            "modified_at", "parent_id", "web_view_link", "is_trashed", "indexed_at",
+            "brief", "briefed_at"
+        }
+        select_fields = []
+        for f in fields:
+            f = f.strip()
+            if f in allowed:
+                prefix = "b." if f in ["brief", "briefed_at"] else "f."
+                select_fields.append(f"{prefix}{f}")
+        select_clause = ", ".join(select_fields) if select_fields else "f.*, b.brief, b.briefed_at"
+    else:
+        select_clause = "f.*, b.brief, b.briefed_at"
+
     query = f"""
-        SELECT f.*, b.brief, b.briefed_at
+        SELECT {select_clause}
         FROM files f
         LEFT JOIN briefs b ON b.file_id = f.id
         {where}
-        ORDER BY f.modified_at DESC
+        ORDER BY {order_by}
         LIMIT ?
     """
     params.append(limit)

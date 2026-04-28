@@ -80,6 +80,8 @@ def cmd_search(args) -> int:
         trashed_only=args.trashed_only,
         has_brief=has_brief,
         brief_contains=args.brief_contains,
+        sort_by=args.sort_by,
+        fields=args.fields.split(",") if args.fields else None,
         limit=args.limit,
     )
     if not rows:
@@ -158,8 +160,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_search.add_argument("--owner", "-o", help="Filter by owner email (substring)")
     p_search.add_argument("--parent", "-p", help="Filter by parent folder ID")
-    p_search.add_argument("--limit", "-l", type=int, default=50, help="Max results (default: 50)")
+    p_search.add_argument("--limit", "-l", type=int, default=10, help="Max results (default: 10)")
     p_search.add_argument("--json", "-j", action="store_true", help="Output as JSON")
+    p_search.add_argument(
+        "--sort-by", choices=["modified", "size", "name"], default="modified",
+        help="Sort results (default: modified)"
+    )
+    p_search.add_argument("--fields", help="Comma-separated list of fields to return")
     
     # Date filters
     p_search.add_argument("--after", help="Modified after date (ISO or relative e.g. 7d)")

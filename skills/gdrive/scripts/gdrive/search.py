@@ -1,7 +1,7 @@
 """Query the local SQLite index."""
 
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from gdrive import db
 
@@ -67,6 +67,8 @@ def run(
     trashed_only: bool = False,
     has_brief: Optional[bool] = None,
     brief_contains: Optional[str] = None,
+    sort_by: str = "modified",
+    fields: Optional[List[str]] = None,
     limit: int = 50,
 ):
     resolved_mime = _resolve_mime(mime)
@@ -85,6 +87,8 @@ def run(
         trashed_only=trashed_only,
         has_brief=has_brief,
         brief_contains=brief_contains,
+        sort_by=sort_by,
+        fields=fields,
         limit=limit,
     )
     return rows
