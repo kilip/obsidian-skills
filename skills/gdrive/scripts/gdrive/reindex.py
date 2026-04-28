@@ -35,10 +35,11 @@ def run(
         resume_token = resumable["last_page_token"]
         logger.info("Resuming from previous failed run (ID %d, token=%s)", resumable["id"], resume_token)
 
+    prefix = "[dry-run] " if dry_run else ""
     logger.info(
-        "Starting reindex (mode=%s, dry_run=%s, limit=%s, resume=%s) ...",
+        "%sStarting reindex (mode=%s, limit=%s, resume=%s) ...",
+        prefix,
         "incremental" if since else "full",
-        dry_run,
         limit,
         bool(resume_token),
     )
@@ -92,7 +93,7 @@ def run(
                 count, added, updated, deleted
             )
         else:
-            logger.info("Dry-run complete — no writes performed.")
+            logger.info("[dry-run] complete — no writes performed.")
 
     except Exception as exc:
         logger.error("Reindex failed: %s", exc)
@@ -120,12 +121,13 @@ def _mark_trashed(conn, dry_run: bool) -> int:
                 db.mark_as_trashed(conn, file_id)
                 count += 1
             else:
-                logger.debug("[dry-run] would mark trashed: %s (%s)", f.get("name"), file_id)
+                logger.info("[dry-run] would mark trashed: %s (%s)", f.get("name"), file_id)
                 count += 1
 
     if not dry_run and count > 0:
         conn.commit()
     
     if count > 0:
-        logger.info("Detected %d trashed files.", count)
+        prefix = "[dry-run] " if dry_run else ""
+        logger.info("%sDetected %d trashed files.", prefix, count)
     return count
